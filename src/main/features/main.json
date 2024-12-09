@@ -28,22 +28,6 @@
         "id":"net.minidev:accessors-smart:2.5.1",
         "start-order": 24
      },
-    {
-        "id":"redis.clients:jedis:5.1.5",
-        "start-order": 24
-     },
-     {
-        "id": "org.apache.commons:commons-pool2:2.12.0",
-        "start-order": 24
-     },
-     {
-        "id": "com.google.code.gson:gson:2.11.0",
-        "start-order": 24
-     },
-     {
-        "id": "org.json:json:20231013",
-        "start-order": 24
-     },
      {
         "id": "org.apache.sling:org.apache.sling.commons.crypto:1.1.0",
         "start-order": 24
@@ -51,6 +35,10 @@
      {
         "id": "org.apache.servicemix.bundles:org.apache.servicemix.bundles.jasypt:1.9.3_1",
         "start-order": 24
+     },
+     {
+        "id": "${project.groupId}:${project.artifactId}:${project.version}",
+        "start-order": 25
      }
   ]
 }

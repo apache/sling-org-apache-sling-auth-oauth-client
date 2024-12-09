@@ -135,6 +135,7 @@ Validated providers:
 ### Deployment
 
 A set of dependencies required by this bundle, on top of the Sling Starter ones, is available at `src/main/features/main.json`.
+For the tokens to be stored in Redis ( see [#redis-storage] ) an additional feature with dependencies is found at `src/main/features/redis.json`. 
 
 Since the bundle relies on encryption to create and validate the OAuth 2.0 `state` parameter, a `CryptoService` must be configured
 

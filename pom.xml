@@ -68,8 +68,6 @@
                 <extensions>true</extensions>
                 <configuration>
                     <skipAddFeatureDependencies>true</skipAddFeatureDependencies>
-                    <skipAddJarToFeature>false</skipAddJarToFeature>
-                    <jarStartOrder>25</jarStartOrder>
                     <framework>
                         <groupId>org.apache.felix</groupId>
                         <artifactId>org.apache.felix.framework</artifactId>
@@ -87,7 +85,7 @@
                     <aggregates>
                         <aggregate>
                             <classifier>app</classifier>
-                            <filesInclude>*.json</filesInclude>
+                            <filesInclude>main.json</filesInclude>
                             <includeArtifact>
                                 <groupId>org.apache.sling</groupId>
                                 <artifactId>org.apache.sling.starter</artifactId>

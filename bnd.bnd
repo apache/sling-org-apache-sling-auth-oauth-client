@@ -1,0 +1,3 @@
+# Make Jedis imports optional, the bundle can work with JCR persistence only
+Import-Package: redis.clients.jedis;resolution:=optional, \
+    *;
