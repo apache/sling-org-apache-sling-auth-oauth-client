@@ -32,18 +32,11 @@ import javax.servlet.ServletException;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.apache.sling.auth.oauth_client.OAuthException;
-import org.apache.sling.auth.oauth_client.OAuthToken;
-import org.apache.sling.auth.oauth_client.OAuthTokenStore;
+import org.apache.sling.auth.oauth_client.InMemoryOAuthTokenStore;
 import org.apache.sling.auth.oauth_client.OAuthTokens;
-import org.apache.sling.auth.oauth_client.impl.OAuthCallbackException;
-import org.apache.sling.auth.oauth_client.impl.OAuthCallbackServlet;
-import org.apache.sling.auth.oauth_client.impl.OAuthStateManager;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.apache.sling.testing.mock.sling.junit5.SlingContextExtension;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,39 +46,6 @@ import com.sun.net.httpserver.HttpServer;
 
 @ExtendWith(SlingContextExtension.class)
 class OAuthCallbackServletTest {
-    
-    static final class StubOAuthTokenStore implements OAuthTokenStore {
-
-        private OAuthTokens tokens;
-
-        @Override
-        public void persistTokens(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver, @NotNull OAuthTokens tokens)
-                throws OAuthException {
-            if ( this.tokens != null )
-                throw new IllegalStateException("Tokens already set once");
-            this.tokens = tokens;
-            
-        }
-
-        @Override
-        public @NotNull OAuthToken getRefreshToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
-            throw new IllegalStateException("Not implemented");
-        }
-
-        @Override
-        public @NotNull OAuthToken getAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
-            throw new IllegalStateException("Not implemented");
-        }
-        
-        @Override
-        public void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
-        	throw new IllegalStateException("Not implemented");
-        }
-        
-        public OAuthTokens getTokens() {
-            return tokens;
-        }
-    }
 
     private static final String MOCK_OIDC_PARAM = "mock-oidc-param";
 
@@ -95,7 +55,7 @@ class OAuthCallbackServletTest {
 
     private HttpServer tokenEndpointServer;
 
-    private StubOAuthTokenStore tokenStore;
+    private InMemoryOAuthTokenStore tokenStore;
 
     private OAuthCallbackServlet servlet;
     
@@ -114,7 +74,7 @@ class OAuthCallbackServletTest {
             )
        );
         
-        tokenStore = new StubOAuthTokenStore();
+        tokenStore = new InMemoryOAuthTokenStore();
         servlet = new OAuthCallbackServlet(connections, tokenStore, new StubOAuthStateManager());
     }
     
@@ -256,7 +216,9 @@ class OAuthCallbackServletTest {
         
         servlet.service(context.request(), context.response());
         
-        assertThat(tokenStore.getTokens())
+        assertThat(tokenStore.allTokens())
+            .hasSize(1)
+            .element(0)
             .isNotNull()
             .extracting( OAuthTokens::accessToken )
             .isEqualTo("Token");
