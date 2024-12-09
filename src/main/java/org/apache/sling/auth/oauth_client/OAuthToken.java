@@ -16,6 +16,9 @@
  */
 package org.apache.sling.auth.oauth_client;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
 /**
  * Information about an OAuth token
  * 
@@ -27,12 +30,12 @@ public class OAuthToken {
     private final TokenState state;
     private final String value;
 
-    public OAuthToken(TokenState state, String value) {
+    public OAuthToken(@NotNull TokenState state, @Nullable String value) {
         this.state = state;
         this.value = value;
     }
 
-    public TokenState getState() {
+    public @NotNull TokenState getState() {
         return state;
     }
 
@@ -42,7 +45,7 @@ public class OAuthToken {
      * @return the value, in case the {@link #getState() state} is {@code OidcTokenState#VALID}.
      * @throws IllegalStateException in case the {@link #getState() state} is not {@code OidcTokenState#VALID}.
      */
-    public String getValue() {
+    public @Nullable String getValue() {
         if ( state != TokenState.VALID )
             throw new IllegalStateException("Can't retrieve a token value when the token state is "  + state);
         return value;

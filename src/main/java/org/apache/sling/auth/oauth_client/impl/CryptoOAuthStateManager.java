@@ -19,6 +19,8 @@ package org.apache.sling.auth.oauth_client.impl;
 import java.util.Optional;
 
 import org.apache.sling.commons.crypto.CryptoService;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -39,7 +41,7 @@ public class CryptoOAuthStateManager implements OAuthStateManager {
     }
     
     @Override
-    public State toNimbusState(OAuthState state) {
+    public @NotNull State toNimbusState(@NotNull OAuthState state) {
         
         // Generate and encrypt state
         String rawState = state.perRequestKey() + "|" + state.connectionName();
@@ -51,7 +53,7 @@ public class CryptoOAuthStateManager implements OAuthStateManager {
     }
 
     @Override
-    public Optional<OAuthState> toOAuthState(State state) {
+    public @NotNull Optional<OAuthState> toOAuthState(@Nullable State state) {
         
         if ( state == null )
             return Optional.empty();

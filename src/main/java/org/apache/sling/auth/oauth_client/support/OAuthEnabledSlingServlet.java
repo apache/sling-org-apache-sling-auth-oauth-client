@@ -83,6 +83,7 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
 	          return;
 	        }
 	        
+			// FIXME: refresh can only work for an existing refresh token -> handle null value
 	        OAuthTokens oidcTokens = oidcClient.refreshTokens(connection, refreshToken.getValue());
 	        tokenStore.persistTokens(connection, request.getResourceResolver(), oidcTokens);
 	        doGetWithPossiblyInvalidToken(request, response, new OAuthToken(TokenState.VALID, oidcTokens.accessToken()), redirectPath);
@@ -90,7 +91,8 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
 	    }
 	}
 	
-	private void doGetWithPossiblyInvalidToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, OAuthToken token, String redirectPath) throws ServletException, IOException {
+	private void doGetWithPossiblyInvalidToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, 
+											   @NotNull OAuthToken token, @NotNull String redirectPath) throws ServletException, IOException {
 	    try {
             doGetWithToken(request, response, token);
         } catch (ServletException | IOException e) {
@@ -109,7 +111,7 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
 	    return request.getRequestURI();
 	}
 
-	protected abstract void doGetWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, OAuthToken token)
+	protected abstract void doGetWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, @NotNull OAuthToken token)
 	        throws ServletException, IOException;
 	
     protected boolean isInvalidAccessTokenException(Exception e) {

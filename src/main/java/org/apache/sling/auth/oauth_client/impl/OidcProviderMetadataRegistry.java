@@ -22,6 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import org.apache.sling.auth.oauth_client.OAuthException;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Component;
 
 import com.nimbusds.oauth2.sdk.GeneralException;
@@ -31,7 +33,7 @@ import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
 /**
  * A registry for provider metadata
  * 
- * <p>Encapsulates the logic for retrieving the {@link #OIDCProviderMetadata} for a given 
+ * <p>Encapsulates the logic for retrieving the {@link OIDCProviderMetadata} for a given 
  * connection.</p>
  * 
  * <p>Maintains a best-effort, unbounded, cache for the metadata, on the assumption that
@@ -42,7 +44,7 @@ public class OidcProviderMetadataRegistry {
     private final ConcurrentMap<String, OIDCProviderMetadata> cache = new ConcurrentHashMap<>();
 
     // visible for testing
-    protected OIDCProviderMetadata getProviderMetadata(String base) {
+    protected @NotNull OIDCProviderMetadata getProviderMetadata(@NotNull String base) {
         return cache.computeIfAbsent(base, s -> {
             try {
                 return OIDCProviderMetadata.resolve(new Issuer(s));
@@ -52,11 +54,11 @@ public class OidcProviderMetadataRegistry {
         });
     }
     
-    public URI getTokenEndpoint(String base) {
+    public @Nullable URI getTokenEndpoint(@NotNull String base) {
         return getProviderMetadata(base).getTokenEndpointURI();
     }
     
-    public URI getAuthorizationEndpoint(String base) {
+    public @Nullable URI getAuthorizationEndpoint(@NotNull String base) {
         return getProviderMetadata(base).getAuthorizationEndpointURI();
     }
 }

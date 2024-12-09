@@ -36,7 +36,7 @@ public record ResolvedOAuthConnection(
         List<String> scopes,
         List<String> additionalAuthorizationParameters) {
     
-    public static ResolvedOAuthConnection resolve(@NotNull ClientConnection connection) {
+    public static @NotNull ResolvedOAuthConnection resolve(@NotNull ClientConnection connection) {
         
         if ( connection instanceof OidcConnectionImpl impl ) {
             return new ResolvedOAuthConnection(

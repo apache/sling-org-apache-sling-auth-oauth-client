@@ -16,6 +16,8 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
+import org.jetbrains.annotations.NotNull;
+
 /**
  * Signals that an exceptional condition has occurred while starting the OAuth flow
  */
@@ -23,7 +25,7 @@ public class OAuthEntryPointException extends OAuthFlowException {
     
     private static final long serialVersionUID = 1L;
 
-    public OAuthEntryPointException(String userFacingMessage, Throwable cause) {
+    public OAuthEntryPointException(@NotNull String userFacingMessage, @NotNull Throwable cause) {
         super(userFacingMessage, cause);
     }
 }

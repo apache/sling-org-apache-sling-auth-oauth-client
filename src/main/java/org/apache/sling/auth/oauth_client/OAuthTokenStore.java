@@ -17,6 +17,7 @@
 package org.apache.sling.auth.oauth_client;
 
 import org.apache.sling.api.resource.ResourceResolver;
+import org.jetbrains.annotations.NotNull;
 
 //
 // In terms of what typed objects we expose, there are a number of ways
@@ -39,11 +40,11 @@ import org.apache.sling.api.resource.ResourceResolver;
  */
 public interface OAuthTokenStore {
 
-    OAuthToken getAccessToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException;
+    @NotNull OAuthToken getAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException;
     
-    OAuthToken getRefreshToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException;
+    @NotNull OAuthToken getRefreshToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException;
     
-    void persistTokens(ClientConnection connection, ResourceResolver resolver, OAuthTokens tokens) throws OAuthException;
+    void persistTokens(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver, @NotNull OAuthTokens tokens) throws OAuthException;
     
-    void clearAccessToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException;
+    void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException;
 }

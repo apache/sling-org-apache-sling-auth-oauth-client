@@ -16,6 +16,8 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
+import org.jetbrains.annotations.NotNull;
+
 import javax.servlet.ServletException;
 
 /**
@@ -28,7 +30,7 @@ public class OAuthFlowException extends ServletException {
 
     private static final long serialVersionUID = 1L;
 
-    public OAuthFlowException(String userFacingMessage, Throwable rootCause) {
+    public OAuthFlowException(@NotNull String userFacingMessage, @NotNull Throwable rootCause) {
         super(userFacingMessage, rootCause);
     }
 }

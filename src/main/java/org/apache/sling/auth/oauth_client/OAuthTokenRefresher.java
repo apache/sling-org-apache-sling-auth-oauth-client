@@ -16,6 +16,8 @@
  */
 package org.apache.sling.auth.oauth_client;
 
+import org.jetbrains.annotations.NotNull;
+
 public interface OAuthTokenRefresher {
 
     /**
@@ -28,5 +30,5 @@ public interface OAuthTokenRefresher {
      * @return OAuth tokens
      * @throws OAuthException in case anything goes wrong
      */
-    OAuthTokens refreshTokens(ClientConnection connection, String refreshToken) throws OAuthException;
+    @NotNull OAuthTokens refreshTokens(@NotNull ClientConnection connection, @NotNull String refreshToken) throws OAuthException;
 }

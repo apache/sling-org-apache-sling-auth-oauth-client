@@ -17,6 +17,7 @@
 package org.apache.sling.auth.oauth_client.impl;
 
 import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -52,7 +53,7 @@ public class OidcConnectionImpl implements ClientConnection {
     }
     
     @Override
-    public String name() {
+    public @NotNull String name() {
         return cfg.name();
     }
 

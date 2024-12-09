@@ -19,14 +19,16 @@ package org.apache.sling.auth.oauth_client.impl;
 import java.util.Optional;
 
 import com.nimbusds.oauth2.sdk.id.State;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public interface OAuthStateManager {
     
-    static final String PARAMETER_NAME_REDIRECT = "redirect";
-    static final String COOKIE_NAME_REQUEST_KEY = "sling.oauth-request-key";
+    String PARAMETER_NAME_REDIRECT = "redirect";
+    String COOKIE_NAME_REQUEST_KEY = "sling.oauth-request-key";
     
-    State toNimbusState(OAuthState state);
+    @NotNull State toNimbusState(@NotNull OAuthState state);
     
-    Optional<OAuthState> toOAuthState(State state);
+    @NotNull Optional<OAuthState> toOAuthState(@Nullable State state);
 
 }

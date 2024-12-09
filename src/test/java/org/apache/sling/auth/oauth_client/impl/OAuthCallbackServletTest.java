@@ -43,6 +43,7 @@ import org.apache.sling.auth.oauth_client.impl.OAuthCallbackServlet;
 import org.apache.sling.auth.oauth_client.impl.OAuthStateManager;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.apache.sling.testing.mock.sling.junit5.SlingContextExtension;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,7 +59,7 @@ class OAuthCallbackServletTest {
         private OAuthTokens tokens;
 
         @Override
-        public void persistTokens(ClientConnection connection, ResourceResolver resolver, OAuthTokens tokens)
+        public void persistTokens(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver, @NotNull OAuthTokens tokens)
                 throws OAuthException {
             if ( this.tokens != null )
                 throw new IllegalStateException("Tokens already set once");
@@ -67,17 +68,17 @@ class OAuthCallbackServletTest {
         }
 
         @Override
-        public OAuthToken getRefreshToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException {
+        public @NotNull OAuthToken getRefreshToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
             throw new IllegalStateException("Not implemented");
         }
 
         @Override
-        public OAuthToken getAccessToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException {
+        public @NotNull OAuthToken getAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
             throw new IllegalStateException("Not implemented");
         }
         
         @Override
-        public void clearAccessToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException {
+        public void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
         	throw new IllegalStateException("Not implemented");
         }
         

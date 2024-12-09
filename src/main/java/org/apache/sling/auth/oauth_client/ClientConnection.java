@@ -16,10 +16,12 @@
  */
 package org.apache.sling.auth.oauth_client;
 
+import org.jetbrains.annotations.NotNull;
+
 /**
  * Identifies an OAuth or OIDC connection
  */
 public interface ClientConnection {
 
-    String name();
+    @NotNull String name();
 }

@@ -16,6 +16,8 @@
  */
 package org.apache.sling.auth.oauth_client;
 
-public record OidcTokens(String accessToken, long expiresAt, String refreshToken, String idToken) {
+import org.jetbrains.annotations.Nullable;
+
+public record OidcTokens(@Nullable String accessToken, long expiresAt, @Nullable String refreshToken, @Nullable String idToken) {
     
 }

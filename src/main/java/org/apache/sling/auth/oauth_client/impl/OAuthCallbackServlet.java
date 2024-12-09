@@ -43,6 +43,7 @@ import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.OAuthTokenStore;
 import org.apache.sling.auth.oauth_client.OAuthTokens;
 import org.apache.sling.servlets.annotations.SlingServletPaths;
+import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -74,7 +75,7 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
 
     private static final long serialVersionUID = 1L;
 
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private static final Logger logger = LoggerFactory.getLogger(OAuthCallbackServlet.class);
     
     private final Map<String, ClientConnection> connections;
     private final OAuthTokenStore tokenStore;
@@ -90,7 +91,7 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
         return request.getScheme() + "://" + request.getServerName() + portFragment + PATH;
     }
     
-    private static String toErrorMessage(String context, ErrorResponse error) {
+    private static String toErrorMessage(@NotNull String context, @NotNull ErrorResponse error) {
         
         ErrorObject errorObject = error.getErrorObject();
         StringBuilder message = new StringBuilder();
@@ -119,7 +120,7 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
     }
 
     @Override
-    protected void doGet(SlingHttpServletRequest request, SlingHttpServletResponse response)
+    protected void doGet(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
             throws ServletException, IOException {
 
         StringBuffer requestURL = request.getRequestURL();
