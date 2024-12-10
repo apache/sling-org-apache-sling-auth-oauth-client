@@ -35,6 +35,10 @@ import com.nimbusds.oauth2.sdk.http.HTTPResponse;
 import com.nimbusds.oauth2.sdk.id.ClientID;
 import com.nimbusds.oauth2.sdk.id.Identifier;
 import com.nimbusds.oauth2.sdk.id.State;
+import com.nimbusds.openid.connect.sdk.OIDCTokenResponseParser;
+import com.nimbusds.openid.connect.sdk.UserInfoRequest;
+import com.nimbusds.openid.connect.sdk.UserInfoResponse;
+import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 import org.apache.jackrabbit.oak.spi.security.authentication.credentials.CredentialsSupport;
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentityProvider;
 import org.apache.sling.api.resource.ResourceResolverFactory;
@@ -45,6 +49,7 @@ import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.OAuthTokenStore;
 import org.apache.sling.auth.oauth_client.OAuthTokens;
 import org.apache.sling.jcr.api.SlingRepository;
+import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.osgi.framework.BundleContext;
@@ -63,8 +68,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -72,14 +75,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Component(
-//        configurationPolicy = ConfigurationPolicy.REQUIRE,
-//        service = AuthenticationHandler.class,
-//        property = {
-//                AuthenticationHandler.TYPE_PROPERTY + "="+ "Oidc",
-//                "service.description=" + "Oidc Header Authentication Handler",
-//                "service.ranking" + "=100000"
-//
-//        },
         service = AuthenticationHandler.class,
         immediate = true
 )
@@ -89,6 +84,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
 
     private static final Logger logger = LoggerFactory.getLogger(OidcAuthenticationHandler.class);
+    private static final String AUTH_TYPE = "oidc";
 
     private final SlingRepository repository;
 
@@ -102,7 +98,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private  final String callbackUri;
 
     private ResourceResolverFactory resourceResolverFactory;
-
 
     private static final long serialVersionUID = 1L;
 
@@ -158,7 +153,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     @Override
     public AuthenticationInfo extractCredentials(@Nullable HttpServletRequest request, @Nullable HttpServletResponse response) {
         logger.debug("inside extractCredentials");
-            //return AuthenticationInfo.FAIL_AUTH;
 
         StringBuffer requestURL = request.getRequestURL();
         if ( request.getQueryString() != null )
@@ -174,7 +168,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             if ( !clientState.isPresent() )  {
                 logger.debug("Failed state check: no state found in authorization response");
                 response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                return AuthenticationInfo.FAIL_AUTH;
+                return null;
             }
 
             Cookie[] cookies = request.getCookies();
@@ -207,8 +201,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 AuthorizationErrorResponse errorResponse = authResponse.toErrorResponse();
                 throw new OAuthCallbackException("Authentication failed", new RuntimeException(toErrorMessage("Error in authentication response", errorResponse)));
             }
-
-            Optional<String> redirect = Optional.ofNullable(clientState.get().redirect());
 
             String authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
 
@@ -243,20 +235,57 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             httpRequest.setAccept("application/json");
             HTTPResponse httpResponse = httpRequest.send();
 
-            TokenResponse tokenResponse = TokenResponse.parse(httpResponse);
+            // extract oid token from the response
+            TokenResponse tokenResponse = OIDCTokenResponseParser.parse(httpResponse);
+            if ( !tokenResponse.indicatesSuccess() ) {
+                logger.debug("Token error. Received code: {}, message: {}", tokenResponse.toErrorResponse().getErrorObject().getCode(), tokenResponse.toErrorResponse().getErrorObject().getDescription());
+                throw new OAuthCallbackException("Token exchange error", new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse())));
+            }
+            // Make the request to userInfo
+            // TODO: fix the cast
+            HTTPResponse httpResponseUserInfo = new UserInfoRequest(new URI(((OidcConnectionImpl)connection).userInfoUrl()), tokenResponse.toSuccessResponse().getTokens().getAccessToken())
+                    .toHTTPRequest()
+                    .send();
 
-            if ( !tokenResponse.indicatesSuccess() )
+            UserInfoResponse userInfoResponse = UserInfoResponse.parse(httpResponseUserInfo);
+            if (! userInfoResponse.indicatesSuccess()) {
+                // The request failed, e.g. due to invalid or expired token
+                logger.debug("UserInfo error. Received code: {}, message: {}",userInfoResponse.toErrorResponse().getErrorObject().getCode(), userInfoResponse.toErrorResponse().getErrorObject().getDescription());
                 throw new OAuthCallbackException("Token exchange error", new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse())));
 
+            }
+
+            // Extract the claims
+            UserInfo userInfo = userInfoResponse.toSuccessResponse().getUserInfo();
+            logger.debug("Subject: " + userInfo.getSubject());
+            logger.debug("Email: " + userInfo.getEmailAddress());
+            logger.debug("Name: " + userInfo.getGivenName());
+            logger.debug("FamilyName: " + userInfo.getFamilyName());
             OAuthTokens tokens = Converter.toSlingOAuthTokens(tokenResponse.toSuccessResponse().getTokens());
 
-            //tokenStore.persistTokens(connection, (resourceResolverFactory.getResourceResolver(), tokens);
+            // Create AuthenticationInfo object
+            OidcAuthCredentials credentials = new OidcAuthCredentials(userInfo.getSubject().getValue(), idp);
+            credentials.setAttribute(".token", "");
+            credentials.setAttribute("profile/email", userInfo.getEmailAddress());
+            credentials.setAttribute("profile/givenName", userInfo.getGivenName());
+            credentials.setAttribute("profile/familyName", userInfo.getFamilyName());
+            //TODO: Add more attributes
+            //Store the Access Token on user node
+            credentials.setAttribute(JcrUserHomeOAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, tokens.accessToken());
 
-            if ( redirect.isEmpty() ) {
-                response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-            } else {
-                response.sendRedirect(URLDecoder.decode(redirect.get(), StandardCharsets.UTF_8));
-            }
+            AuthenticationInfo authInfo = new AuthenticationInfo(AUTH_TYPE, userInfo.getSubject().getValue());
+            authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
+
+            //format the log message
+            logger.info("User {} authenticated", userInfo.getSubject());
+            return authInfo;
+
+            //TODO: Manage redirect
+//            if ( redirect.isEmpty() ) {
+//                response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+//            } else {
+//                response.sendRedirect(URLDecoder.decode(redirect.get(), StandardCharsets.UTF_8));
+//            }
 
         } catch (IllegalStateException | IllegalArgumentException | OAuthCallbackException e) {
             logger.error("State check failed", e);
@@ -266,8 +295,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             return AuthenticationInfo.FAIL_AUTH;
         }
 
-        // User Authenticated
-        return AuthenticationInfo.FAIL_AUTH;
     }
 
     private static String toErrorMessage(String context, ErrorResponse error) {
@@ -287,79 +314,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         return message.toString();
     }
-
-    
-
-//    private OidcAuthCredentials setAttributes(Jwt<Header, Claims> jwt) {
-//
-//        String userId = jwt.getBody().get("email", String.class);
-//        String imsId = jwt.getBody().get("userID", String.class);
-//        OidcAuthCredentials credentials = new OidcAuthCredentials(userId, imsId, idp);
-//
-//        String[] attributes = new String[]{
-//                "givenName",
-//                "familyName",
-//                "id",
-//                "last_name",
-//                "utcOffset",
-//                "preferred_languages",
-//                "displayName",
-//                "account_type",
-//                "authId",
-//                "emailVerified",
-//                "phoneNumber",
-//                "countryCode",
-//                "name",
-//                "mrktPerm",
-//                "mrktPermEmail",
-//                "first_name",
-//                "email"
-//        };
-//        credentials.setAttribute(".token", "");
-//        for (String attr : attributes) {
-//            log.debug("setting attribute: " + attr);
-//            String value = jwt.getBody().get(attr, String.class);
-//            if (value != null) {
-//                credentials.setAttribute("profile/" + attr, value);
-//            }
-//        }
-//        return credentials;
-//    }
-
-//    private @NotNull AuthenticationInfo handleLogin(@NotNull String jwtString) throws OidcAuthenticationException {
-//
-//        log.debug("inside handleLogin");
-//
-//        try {
-//            Jwt<Header, Claims> jwt = Jwts.parserBuilder().setSigningKey(publicKey).build().parse(jwtString);
-//            String userId = jwt.getBody().get("email", String.class);
-//
-//            if (jwt.getBody().get("aud") == null) {
-//                log.error("Audience null in JWT Token");
-//                throw new OidcAuthenticationException(String.format("Audience null in JWT Token"));
-//            }
-//            if (!jwt.getBody().get("aud").equals(audience)) {
-//                log.error("Invalid audience! Audience configured: {} Audience in JWT: {}", audience, jwt.getBody().get("aud"));
-//                throw new OidcAuthenticationException(String.format("Invalid audience! Audience configured: {} Audience in JWT: {}", audience, jwt.getBody().get("aud")));
-//            }
-//
-//            AuthenticationInfo authInfo = new AuthenticationInfo(AUTH_TYPE, userId);
-//
-//            OidcAuthCredentials credentials = setAttributes(jwt);
-//
-//            List<String> groups = jwt.getBody().get("groups", List.class);
-//            if (groups != null) {
-//                for (String g : groups) {
-//                    credentials.addGroup(g);
-//                }
-//            }
-//            authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
-//
-//            return authInfo;
-//        } catch (Exception e) {
-//            throw new OidcAuthenticationException("Response message to authentication is not valid json", e);
-//        }
-//    }
 
     @Override
     public boolean requestCredentials(HttpServletRequest request, HttpServletResponse response) {
@@ -433,7 +387,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     @Override
     public void dropCredentials(HttpServletRequest request, HttpServletResponse response) {
-        // TODO: add comment
+        // TODO: perform logout from Sling and redirect?
     }
     
     @Override
@@ -455,7 +409,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 //                        repository.getDefaultWorkspace(), true);
 //            }
 //        }
-
+        // TODO how to generate the cookie in pure sling?
         return super.authenticationSucceeded(request, response, authInfo);
     }
 

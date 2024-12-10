@@ -38,7 +38,6 @@ import java.util.Set;
 
 class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameResolver, CredentialsSupport  {
 
-    public static final String IMS_INTERMEDIATE_PATH = "ims";
     private final String name;
     
     OidcIdentityProvider(@NotNull String name) {
@@ -84,8 +83,8 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
 
     @Override
     public @Nullable ExternalIdentity getIdentity(@NotNull ExternalIdentityRef externalIdentityRef) {
-        if (isSameIdp(externalIdentityRef) && externalIdentityRef instanceof JWTGroupRef) {
-            return new JWTGroup(externalIdentityRef);
+        if (isSameIdp(externalIdentityRef) && externalIdentityRef instanceof OidcGroupRef) {
+            return new OidcGroup(externalIdentityRef);
         } 
         return null;
     }
@@ -98,7 +97,7 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
     @Override
     public @Nullable ExternalUser authenticate(@NotNull Credentials credentials) {
         if (validCredentials(credentials)) {
-            return new JWTUser((OidcAuthCredentials) credentials);
+            return new OidcUser((OidcAuthCredentials) credentials);
         }
         return null;
     }
@@ -138,11 +137,11 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
         return name.equals(ref.getProviderName());
     }
     
-    private abstract static class JWTIdentity implements ExternalIdentity {
+    private abstract static class OidcIdentity implements ExternalIdentity {
 
         private final ExternalIdentityRef ref;
         
-        private JWTIdentity(@NotNull ExternalIdentityRef ref) {
+        private OidcIdentity(@NotNull ExternalIdentityRef ref) {
             this.ref = ref;
         }
         
@@ -163,28 +162,26 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
 
         @Override
         public @Nullable String getIntermediatePath() {
-            return IMS_INTERMEDIATE_PATH;
+            return "";
         }
     }
     
-    private final  class JWTUser extends JWTIdentity implements ExternalUser {
+    private final  class OidcUser extends OidcIdentity implements ExternalUser {
 
         private final OidcAuthCredentials creds;
         private final Iterable<String> groups;
-        private final String imsId;
 
-        private JWTUser(@NotNull OidcAuthCredentials creds) {
+        private OidcUser(@NotNull OidcAuthCredentials creds) {
             super(new ExternalIdentityRef(creds.getUserId(), creds.getIdp()));
 
             this.creds = creds;
             this.groups = creds.getGroups();
-            this.imsId = creds.getImsId();
         }
 
         @Override
         public @NotNull Iterable<ExternalIdentityRef> getDeclaredGroups() {
             List<ExternalIdentityRef> externalGroups = new ArrayList<>();
-            groups.forEach(group -> externalGroups.add(new JWTGroupRef(group, creds.getIdp())));
+            groups.forEach(group -> externalGroups.add(new OidcGroupRef(group, creds.getIdp())));
             return externalGroups;
         }
 
@@ -195,12 +192,12 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
 
         @Override
         public ExternalIdentityRef getExternalId() {
-            return new ExternalIdentityRef(imsId, creds.getIdp());
+            return new ExternalIdentityRef(creds.getUserId(), creds.getIdp());
         }
     }
-    private final  class JWTGroup extends JWTIdentity implements ExternalGroup {
+    private final  class OidcGroup extends OidcIdentity implements ExternalGroup {
 
-        private JWTGroup(@NotNull ExternalIdentityRef ref) {
+        private OidcGroup(@NotNull ExternalIdentityRef ref) {
             super(ref);
         }
         
@@ -220,8 +217,8 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
         }
     }
     
-    private  class JWTGroupRef extends ExternalIdentityRef {
-        JWTGroupRef(@NotNull String id, @NotNull String idp) {
+    private  class OidcGroupRef extends ExternalIdentityRef {
+        OidcGroupRef(@NotNull String id, @NotNull String idp) {
             super(id, idp);
         }
     }

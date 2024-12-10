@@ -33,13 +33,26 @@ public class OidcConnectionImpl implements ClientConnection {
 
     @ObjectClassDefinition(name = "OpenID Connect connection details")
     public @interface Config {
+        @AttributeDefinition(name = "name",
+                description = "Name")
         String name();
+
+        @AttributeDefinition(name = "baseUrl",
+                description = "Base URI")
         String baseUrl();
+
+        @AttributeDefinition(name = "clientId",
+                description = "ClientId")
         String clientId();
+
         @AttributeDefinition(type = AttributeType.PASSWORD) String clientSecret();
         String[] scopes();
         String[] additionalAuthorizationParameters();
-        
+
+        @AttributeDefinition(name = "userInfoEndpoint",
+                description = "UserInfoEndpoint URI")
+        String userInfoEndpoint(); //TODO: get it from well_konwn url
+
         String webconsole_configurationFactory_nameHint() default "Name: {name}, base URL: {baseUrl}, clientId: {clientId}";
     }
 
@@ -75,6 +88,10 @@ public class OidcConnectionImpl implements ClientConnection {
 
     public String clientSecret() {
         return cfg.clientSecret();
+    }
+
+    public String userInfoUrl() {
+        return cfg.userInfoEndpoint();
     }
 
     public String[] scopes() {

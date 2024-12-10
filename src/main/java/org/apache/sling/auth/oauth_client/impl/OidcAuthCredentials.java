@@ -48,14 +48,12 @@ class OidcAuthCredentials implements Credentials {
     private final ExternalIdentityRef userId;
 
     private final String idp;
-    private final String imsId;
     private final Map<String,Object> attributes = new HashMap<>();
     private final Set<String> groups = new HashSet<>();
 
-    OidcAuthCredentials(@NotNull String userId, @NotNull String imsId, @NotNull String idp) {
+    OidcAuthCredentials(@NotNull String userId, @NotNull String idp) {
         this.userId = new ExternalIdentityRef(userId, idp);
         this.idp = idp;
-        this.imsId = imsId;
     }
 
     @NotNull String getUserId() {
@@ -66,9 +64,6 @@ class OidcAuthCredentials implements Credentials {
         return idp;
     }
 
-    @NotNull String getImsId() {
-        return imsId;
-    }
     @NotNull Map<String,Object> getAttributes() {
         return Collections.unmodifiableMap(attributes);
     }
