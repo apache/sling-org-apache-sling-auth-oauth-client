@@ -27,10 +27,8 @@ import org.apache.sling.api.SlingHttpServletResponse;
 import org.apache.sling.api.servlets.SlingSafeMethodsServlet;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.OAuthToken;
-import org.apache.sling.auth.oauth_client.OAuthTokenRefresher;
-import org.apache.sling.auth.oauth_client.OAuthTokenStore;
-import org.apache.sling.auth.oauth_client.OAuthTokens;
-import org.apache.sling.auth.oauth_client.OAuthUris;
+import org.apache.sling.auth.oauth_client.TokenAccess;
+import org.apache.sling.auth.oauth_client.TokenResponse;
 import org.apache.sling.auth.oauth_client.TokenState;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -43,14 +41,11 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
 
     private final ClientConnection connection;
 
-    private final OAuthTokenStore tokenStore;
-
-    private final OAuthTokenRefresher oidcClient;
+    private final TokenAccess tokenAccess;
 	
-    protected OAuthEnabledSlingServlet(ClientConnection connection, OAuthTokenStore tokenStore, OAuthTokenRefresher oidcClient) {
+    protected OAuthEnabledSlingServlet(ClientConnection connection, TokenAccess tokenAccess) {
         this.connection = Objects.requireNonNull(connection, "connection may not null");
-        this.tokenStore = Objects.requireNonNull(tokenStore, "tokenStore may not null");
-        this.oidcClient = Objects.requireNonNull(oidcClient, "oidcClient may not null");
+        this.tokenAccess = Objects.requireNonNull(tokenAccess, "tokenAccess may not null");
     }
 
 	@Override
@@ -67,26 +62,11 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
 	    if ( logger.isDebugEnabled() )
 	        logger.debug("Configured with connection (name={}) and redirectPath={}", connection.name(), redirectPath);
 	    
-	    OAuthToken tokenResponse = tokenStore.getAccessToken(connection, request.getResourceResolver());
-	    
-		switch ( tokenResponse.getState() ) {
-	      case VALID:
-            doGetWithPossiblyInvalidToken(request, response, tokenResponse, redirectPath);
-	        break;
-	      case MISSING:
-	        response.sendRedirect(OAuthUris.getOidcEntryPointUri(connection, request, redirectPath).toString());
-	        break;
-	      case EXPIRED:
-	        OAuthToken refreshToken = tokenStore.getRefreshToken(connection, request.getResourceResolver());
-	        if ( refreshToken.getState() != TokenState.VALID ) {
-	          response.sendRedirect(OAuthUris.getOidcEntryPointUri(connection, request, redirectPath).toString());
-	          return;
-	        }
-	        
-	        OAuthTokens oidcTokens = oidcClient.refreshTokens(connection, refreshToken.getValue());
-	        tokenStore.persistTokens(connection, request.getResourceResolver(), oidcTokens);
-	        doGetWithPossiblyInvalidToken(request, response, new OAuthToken(TokenState.VALID, oidcTokens.accessToken()), redirectPath);
-	        break;
+	    TokenResponse tokenResponse = tokenAccess.getAccessToken(connection, request, redirectPath);
+	    if (tokenResponse.hasValidToken() ) {
+	        doGetWithPossiblyInvalidToken(request, response, new OAuthToken(TokenState.VALID, tokenResponse.getTokenValue()), redirectPath);
+	    } else {
+	        response.sendRedirect(tokenResponse.getRedirectUri().toString());
 	    }
 	}
 	
@@ -95,9 +75,9 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
             doGetWithToken(request, response, token);
         } catch (ServletException | IOException e) {
             if (isInvalidAccessTokenException(e)) {
-                logger.warn("Invalid access token, clearing and attempting to retrieve a fresh one", e);
-                tokenStore.clearAccessToken(connection, request.getResourceResolver());
-                response.sendRedirect(OAuthUris.getOidcEntryPointUri(connection, request, redirectPath).toString());
+                logger.warn("Invalid access token, clearing restarting OAuth flow", e);
+                TokenResponse tokenResponse = tokenAccess.clearAccessToken(connection, request, getRedirectPath(request));
+                response.sendRedirect(tokenResponse.getRedirectUri().toString());
             } else {
                 throw e;
             }
