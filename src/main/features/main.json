@@ -41,7 +41,7 @@
         "start-order": 25
      },
      {
-       "id": "org.apache.sling:org.apache.sling:org.apache.sling.jcr.api:2.4.0",
+       "id": "org.apache.sling:org.apache.sling.jcr.api:2.4.0",
          "start-order": 24
      },
      {
