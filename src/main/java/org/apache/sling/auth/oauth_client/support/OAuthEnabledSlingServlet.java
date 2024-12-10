@@ -27,8 +27,8 @@ import org.apache.sling.api.SlingHttpServletResponse;
 import org.apache.sling.api.servlets.SlingSafeMethodsServlet;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.OAuthToken;
-import org.apache.sling.auth.oauth_client.TokenAccess;
-import org.apache.sling.auth.oauth_client.TokenResponse;
+import org.apache.sling.auth.oauth_client.OAuthTokenAccess;
+import org.apache.sling.auth.oauth_client.OAuthTokenResponse;
 import org.apache.sling.auth.oauth_client.TokenState;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -41,9 +41,9 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
 
     private final ClientConnection connection;
 
-    private final TokenAccess tokenAccess;
+    private final OAuthTokenAccess tokenAccess;
 	
-    protected OAuthEnabledSlingServlet(ClientConnection connection, TokenAccess tokenAccess) {
+    protected OAuthEnabledSlingServlet(ClientConnection connection, OAuthTokenAccess tokenAccess) {
         this.connection = Objects.requireNonNull(connection, "connection may not null");
         this.tokenAccess = Objects.requireNonNull(tokenAccess, "tokenAccess may not null");
     }
@@ -62,7 +62,7 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
 	    if ( logger.isDebugEnabled() )
 	        logger.debug("Configured with connection (name={}) and redirectPath={}", connection.name(), redirectPath);
 	    
-	    TokenResponse tokenResponse = tokenAccess.getAccessToken(connection, request, redirectPath);
+	    OAuthTokenResponse tokenResponse = tokenAccess.getAccessToken(connection, request, redirectPath);
 	    if (tokenResponse.hasValidToken() ) {
 	        doGetWithPossiblyInvalidToken(request, response, new OAuthToken(TokenState.VALID, tokenResponse.getTokenValue()), redirectPath);
 	    } else {
@@ -76,7 +76,7 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
         } catch (ServletException | IOException e) {
             if (isInvalidAccessTokenException(e)) {
                 logger.warn("Invalid access token, clearing restarting OAuth flow", e);
-                TokenResponse tokenResponse = tokenAccess.clearAccessToken(connection, request, getRedirectPath(request));
+                OAuthTokenResponse tokenResponse = tokenAccess.clearAccessToken(connection, request, getRedirectPath(request));
                 response.sendRedirect(tokenResponse.getRedirectUri().toString());
             } else {
                 throw e;

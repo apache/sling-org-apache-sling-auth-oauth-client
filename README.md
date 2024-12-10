@@ -19,7 +19,7 @@ the authentication code flow based on OIDC and OAuth 2.0 .
 
 ### Models and other Java APIs
 
-The `TokenAccess` OSGi service exposes methods to retrieve and clear access tokens. These methods encapsulate
+The `OAuthTokenAccess` OSGi service exposes methods to retrieve and clear access tokens. These methods encapsulate
 persistence concerns and handle refresh tokens transparently, if present.
 
 ```java
@@ -30,9 +30,9 @@ public class MyModel {
     
     @OSGiService(filter = "(name=foo)") private ClientConnection connection;
     
-    @OSGiService private TokenAccess tokenAccess;
+    @OSGiService private OAuthTokenAccess tokenAccess;
 
-    private TokenResponse tokenResponse;
+    private OAuthTokenResponse tokenResponse;
     
     @PostConstruct
     public void initToken() {
@@ -77,7 +77,7 @@ public class MySlingServlet extends OAuthEnabledSlingServlet {
    
     @Activate
     public MySlingServlet(@Reference OidcConnection connection, 
-        @Reference TokenAccess tokenAccess,
+        @Reference OAuthTokenAccess tokenAccess,
         @Reference MyRemoteService svc) {
         super(connection, tokenAccess);
         this.svc = svc;
@@ -111,14 +111,14 @@ off a new OAuth authorisation flow.
 ```java
 @Model(adaptables = SlingHttpServletRequest.class)
 public class MySlingModel {
-    @OSGiService private TokenAccess tokenAccess;
+    @OSGiService private OAuthTokenAccess tokenAccess;
     @SlingObject SlingHttpServletRequest request;
     @OSGiService(filter = "(name=foo)") private ClientConnection connection;
     
     public String getLink() {
         // code elided
         if ( accessTokenIsInvalid() ) {
-            TokenResponse response = tokenAccess.clearAccessToken(connection, request, request.getRequestURI());
+            OAuthTokenResponse response = tokenAccess.clearAccessToken(connection, request, request.getRequestURI());
             return response.getRedirectUri().toString();
         }
     }
@@ -136,7 +136,7 @@ a new access token.
 ```java
 @Component
 public class MyComponent {
-    @Reference private TokenAccess tokenAccess;
+    @Reference private OAuthTokenAccess tokenAccess;
     
     public void execute(@Reference OidcConnection connection, ResourceResolver resolver) {
         // code elided

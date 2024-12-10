@@ -21,15 +21,15 @@ import org.apache.sling.api.resource.ResourceResolver;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Entry point for accessing and clearing access tokens
+ * Entry point for accessing and clearing OAuth access tokens
  * 
  * <p>The tokens are stored distinctly for each client connection and user. The client connection is identified by 
- * {@link ClientConnection#name() name} and the user is identified by the {@link ResourceResolver#getUserID()}. </p>
+ * {@link ClientConnection#name() name} and the user is identified by the {@link ResourceResolver#getUserID() user id}. </p>
  * 
  * <p>The storage strategy may vary and is controlled by the currently active implementation of the {@link OAuthTokenStore}.</p>
  */
 @NotNull
-public interface TokenAccess {
+public interface OAuthTokenAccess {
 
     /**
      * Retrieves an existing access, valid, access token from storage.
@@ -41,7 +41,7 @@ public interface TokenAccess {
      * @param redirectPath the path to redirect to after completing the OAuth flow
      * @return the token response
      */
-    TokenResponse getAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath);
+    OAuthTokenResponse getAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath);
 
     /**
      * Clears the access token for the given connection and user, as identified by the request.
@@ -53,8 +53,7 @@ public interface TokenAccess {
      * @param redirectPath the path to redirect to after completing the OAuth flow 
      * @return the token response
      */
-    TokenResponse clearAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath);
-    
+    OAuthTokenResponse clearAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath);
 
     /**
      * Clears the access token for the given connection and user, as identified by the resource resolver

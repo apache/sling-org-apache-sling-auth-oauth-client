@@ -37,7 +37,7 @@ class TokenAccessImplTest {
         
         TokenAccessImpl tokenAccess = new TokenAccessImpl(tokenStore, null);
         
-        TokenResponse tokenResponse = tokenAccess.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
+        OAuthTokenResponse tokenResponse = tokenAccess.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
         
         assertThat(tokenResponse)
             .as("tokenResponse")
@@ -60,7 +60,7 @@ class TokenAccessImplTest {
         
         tokenStore.persistTokens(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver(), new OAuthTokens("access", 0, null));
         
-        TokenResponse tokenResponse = tokenAccess.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
+        OAuthTokenResponse tokenResponse = tokenAccess.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
         
         assertThat(tokenResponse)
             .as("tokenResponse")
@@ -94,7 +94,7 @@ class TokenAccessImplTest {
 
         tokenStore.persistTokens(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver(), expiredTokens);
         
-        TokenResponse tokenResponse = tokenAccess.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
+        OAuthTokenResponse tokenResponse = tokenAccess.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
         
         assertThat(tokenResponse)
             .as("tokenResponse")
@@ -115,15 +115,15 @@ class TokenAccessImplTest {
         
         tokenStore.persistTokens(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver(), new OAuthTokens("access", 0, null));
 
-        TokenResponse okResponse = tokenAccess.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
+        OAuthTokenResponse okResponse = tokenAccess.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
         assertThat(okResponse.hasValidToken()).isTrue();
         
-        TokenResponse clearResponse = tokenAccess.clearAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
+        OAuthTokenResponse clearResponse = tokenAccess.clearAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
         
         assertThat(clearResponse)
             .as("tokenResponse after clear")
             .isNotNull()
-            .extracting(TokenResponse::hasValidToken)
+            .extracting(OAuthTokenResponse::hasValidToken)
             .isEqualTo(false);
     }
     
@@ -136,7 +136,7 @@ class TokenAccessImplTest {
         
         tokenStore.persistTokens(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver(), new OAuthTokens("access", 0, null));
 
-        TokenResponse okResponse = tokenAccess.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
+        OAuthTokenResponse okResponse = tokenAccess.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
         assertThat(okResponse.hasValidToken()).isTrue();
         
         tokenAccess.clearAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver());

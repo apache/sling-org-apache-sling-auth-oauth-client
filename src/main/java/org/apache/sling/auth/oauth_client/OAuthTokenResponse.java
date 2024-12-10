@@ -34,14 +34,14 @@ import org.jetbrains.annotations.NotNull;
  * <p>Methods generally throw {@link IllegalStateException} if they are called in an unexpected state and do not return null values.</p>
  */
 @NotNull
-public class TokenResponse {
+public class OAuthTokenResponse {
     
     private final Optional<String> token;
     private final ClientConnection connection;
     private final SlingHttpServletRequest request;
     private String redirectPath;
     
-    public TokenResponse(Optional<String> token, ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
+    public OAuthTokenResponse(Optional<String> token, ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
         this.token = token;
         this.connection = connection;
         this.request = request;

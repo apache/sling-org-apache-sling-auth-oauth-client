@@ -27,7 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Component
-public class TokenAccessImpl implements TokenAccess {
+public class TokenAccessImpl implements OAuthTokenAccess {
     
     private final Logger logger = LoggerFactory.getLogger(getClass());
     
@@ -41,7 +41,7 @@ public class TokenAccessImpl implements TokenAccess {
     }
     
     @Override
-    public TokenResponse getAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
+    public OAuthTokenResponse getAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
         
         ResourceResolver resolver = request.getResourceResolver();
         
@@ -55,7 +55,7 @@ public class TokenAccessImpl implements TokenAccess {
             if (logger.isDebugEnabled())
                 logger.debug("Returning valid access token for connection {} and user {}", connection.name(), request.getUserPrincipal());
             
-            return new TokenResponse(Optional.of(token.getValue()), connection, request, redirectPath);
+            return new OAuthTokenResponse(Optional.of(token.getValue()), connection, request, redirectPath);
         }
         
         // expired token but refresh token present -> refresh and return
@@ -67,7 +67,7 @@ public class TokenAccessImpl implements TokenAccess {
 
                 OAuthTokens newTokens = tokenRefresher.refreshTokens(connection, refreshToken.getValue());
                 tokenStore.persistTokens(connection, resolver, newTokens);
-                return new TokenResponse(Optional.of(newTokens.accessToken()), connection, request, redirectPath);
+                return new OAuthTokenResponse(Optional.of(newTokens.accessToken()), connection, request, redirectPath);
             }
         }
 
@@ -75,18 +75,18 @@ public class TokenAccessImpl implements TokenAccess {
         if ( logger.isDebugEnabled() )
             logger.debug("No valid access token found for connection {} and user {}", connection.name(), request.getUserPrincipal());
         
-        return new TokenResponse(Optional.empty(), connection, request, redirectPath);
+        return new OAuthTokenResponse(Optional.empty(), connection, request, redirectPath);
     }
     
     @Override
-    public TokenResponse clearAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
+    public OAuthTokenResponse clearAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
         
         if ( logger.isDebugEnabled() )
             logger.debug("Clearing access token for connection {} and user {}", connection.name(), request.getUserPrincipal());
 
         tokenStore.clearAccessToken(connection, request.getResourceResolver());
         
-        return new TokenResponse(Optional.empty(), connection, request, redirectPath);
+        return new OAuthTokenResponse(Optional.empty(), connection, request, redirectPath);
     }
     
     @Override
