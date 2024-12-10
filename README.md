@@ -131,6 +131,7 @@ Validated providers:
 - Google, OIDC, with base URL of https://accounts.google.com , see [Google OIDC documentation](https://developers.google.com/identity/protocols/oauth2/openid-connect)
 - GitHub, OAuth 2.0, with authorizationEndpoint https://github.com/login/oauth/authorize and tokenEndpoint https://github.com/login/oauth/access_token
 - KeyCloak ( see [#keycloak] )
+- Microsoft, OIDC, with base URL of https://login.microsoftonline.com/$TENANT\_ID/v2.0. see [Microsoft OIDC documentation](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-protocols-oidc)
 
 ### Deployment
 
