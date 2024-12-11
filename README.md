@@ -17,7 +17,48 @@ the authentication code flow based on OIDC and OAuth 2.0 .
 
 ## Usage
 
-### High-level APIs
+### Models and other Java APIs
+
+The `OAuthTokenAccess` OSGi service exposes methods to retrieve and clear access tokens. These methods encapsulate
+persistence concerns and handle refresh tokens transparently, if present.
+
+```java
+@Model(adaptables = SlingHttpServletRequest.class)
+public class MyModel {
+    
+    @SlingObject private SlingHttpServletRequest request;
+    
+    @OSGiService(filter = "(name=foo)") private ClientConnection connection;
+    
+    @OSGiService private OAuthTokenAccess tokenAccess;
+
+    private OAuthTokenResponse tokenResponse;
+    
+    @PostConstruct
+    public void initToken() {
+        tokenResponse = tokenAccess.getAccessToken(connection, request, request.getRequestURI());
+    }
+    
+    public MyView getResponse() {
+        if ( tokenResponse.hasValidToken() ) {
+            return doQuery(tokenResponse.getTokenValue());
+        }
+        
+        return null;
+    }
+    
+    public String getRedirectLink() {
+        if ( !tokenResponse.hasValidToken() ) {
+            return tokenResponse.getRedirectUri().toString();
+        }
+        
+        return null;
+    }
+}
+
+```
+
+### Servlets
 
 The bundle exposes an abstract `OAuthEnabledSlingServlet` that contains the boilerplate code needed
 to obtain a valid OAuth 2 access token.
@@ -36,10 +77,9 @@ public class MySlingServlet extends OAuthEnabledSlingServlet {
    
     @Activate
     public MySlingServlet(@Reference OidcConnection connection, 
-        @Reference OAuthTokenStore tokenStore,
-        @Reference OAuthTokenRefresher oidcClient,
+        @Reference OAuthTokenAccess tokenAccess,
         @Reference MyRemoteService svc) {
-        super(connection, tokenStore, oidcClient);
+        super(connection, tokenAccess);
         this.svc = svc;
     }
 
@@ -52,9 +92,6 @@ public class MySlingServlet extends OAuthEnabledSlingServlet {
 }
 ```
 
-### Low-level APIs
-
-TODO
 
 ### Clearing access tokens
 
@@ -65,24 +102,57 @@ invalidated out of band.
 The client will need to determine if the access token is invalid as this is a provider-specific
 check.
 
-To remove invalid access tokens there is a low-level API
+#### When the request and response are available
+
+This method is generally recommended as it permits the generation of a redirect URI that will kick
+off a new OAuth authorisation flow.
+
 
 ```java
-public class MyComponent {}
-    @Reference private OAuthTokenStore tokenStore;
+@Model(adaptables = SlingHttpServletRequest.class)
+public class MySlingModel {
+    @OSGiService private OAuthTokenAccess tokenAccess;
+    @SlingObject SlingHttpServletRequest request;
+    @OSGiService(filter = "(name=foo)") private ClientConnection connection;
     
-    public void execute(@Reference OidcConnection connection, ResourceResolver resolver) {
+    public String getLink() {
         // code elided
         if ( accessTokenIsInvalid() ) {
-            tokenStore.clearAccessToken(connection, resolver);
-            // redirect to provider or present a message to the user
+            OAuthTokenResponse response = tokenAccess.clearAccessToken(connection, request, request.getRequestURI());
+            return response.getRedirectUri().toString();
         }
     }
 }
 ```
 
-For classes that extend from the `OAuthEnabledSlingServlet` the following method override can be
-applied
+
+#### When the request and response are not available
+
+
+This approach should be used when invalidating access tokens without user interaction, as it does not
+provide a mechanism to generate a redirect URL for restarting the OAuth authorisation flow and obtaining
+a new access token.
+
+```java
+@Component
+public class MyComponent {
+    @Reference private OAuthTokenAccess tokenAccess;
+    
+    public void execute(@Reference OidcConnection connection, ResourceResolver resolver) {
+        // code elided
+        if ( accessTokenIsInvalid() ) {
+            tokenAccess.clearAccessToken(connection, resolver);
+        }
+    }
+}
+```
+
+
+
+#### When extending OAuthEnabledSlingServlet
+
+For classes that extend from the `OAuthEnabledSlingServlet` the `isInvalidAccessTokenException` method can be
+overriden. If this method returns true, the access token is cleared and a new OAuth flow is started.
 
 ```java
 @Component(service = { Servlet.class })
@@ -132,6 +202,7 @@ Validated providers:
 - GitHub, OAuth 2.0, with authorizationEndpoint https://github.com/login/oauth/authorize and tokenEndpoint https://github.com/login/oauth/access_token
 - KeyCloak ( see [#keycloak] )
 - Microsoft, OIDC, with base URL of https://login.microsoftonline.com/$TENANT\_ID/v2.0. see [Microsoft OIDC documentation](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-protocols-oidc)
+- Adobe IMS, OAuth 2.0, with authorizationEndpoint https://ims-na1.adobelogin.com/ims/authorize/v3 and tokenEndpoint https://ims-na1.adobelogin.com/ims/token/v1
 
 ### Deployment
 
