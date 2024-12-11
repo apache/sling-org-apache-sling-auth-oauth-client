@@ -20,6 +20,7 @@ import java.net.URI;
 import java.util.Optional;
 
 import org.apache.sling.api.SlingHttpServletRequest;
+import org.apache.sling.auth.oauth_client.impl.OAuthUris;
 import org.jetbrains.annotations.NotNull;
 
 /**

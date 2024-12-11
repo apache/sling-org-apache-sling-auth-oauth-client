@@ -14,14 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client;
+package org.apache.sling.auth.oauth_client.impl;
 
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 import org.apache.sling.api.SlingHttpServletRequest;
-import org.apache.sling.auth.oauth_client.impl.OAuthEntryPointServlet;
+import org.apache.sling.auth.oauth_client.ClientConnection;
 
 public abstract class OAuthUris {
 

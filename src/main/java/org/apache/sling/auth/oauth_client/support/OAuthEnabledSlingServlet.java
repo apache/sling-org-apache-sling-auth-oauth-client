@@ -26,10 +26,10 @@ import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.SlingHttpServletResponse;
 import org.apache.sling.api.servlets.SlingSafeMethodsServlet;
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.apache.sling.auth.oauth_client.OAuthToken;
 import org.apache.sling.auth.oauth_client.OAuthTokenAccess;
 import org.apache.sling.auth.oauth_client.OAuthTokenResponse;
-import org.apache.sling.auth.oauth_client.TokenState;
+import org.apache.sling.auth.oauth_client.impl.OAuthToken;
+import org.apache.sling.auth.oauth_client.impl.TokenState;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,10 +72,10 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
 	
 	private void doGetWithPossiblyInvalidToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, OAuthToken token, String redirectPath) throws ServletException, IOException {
 	    try {
-            doGetWithToken(request, response, token);
+            doGetWithToken(request, response, token.getValue());
         } catch (ServletException | IOException e) {
             if (isInvalidAccessTokenException(e)) {
-                logger.warn("Invalid access token, clearing restarting OAuth flow", e);
+                logger.warn("Invalid access token, clearing exiting token and restarting OAuth flow", e);
                 OAuthTokenResponse tokenResponse = tokenAccess.clearAccessToken(connection, request, getRedirectPath(request));
                 response.sendRedirect(tokenResponse.getRedirectUri().toString());
             } else {
@@ -89,7 +89,7 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
 	    return request.getRequestURI();
 	}
 
-	protected abstract void doGetWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, OAuthToken token)
+	protected abstract void doGetWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, String accessToken)
 	        throws ServletException, IOException;
 	
     protected boolean isInvalidAccessTokenException(Exception e) {

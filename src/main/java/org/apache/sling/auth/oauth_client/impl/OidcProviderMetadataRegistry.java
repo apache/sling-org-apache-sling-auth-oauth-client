@@ -21,7 +21,6 @@ import java.net.URI;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import org.apache.sling.auth.oauth_client.OAuthException;
 import org.osgi.service.component.annotations.Component;
 
 import com.nimbusds.oauth2.sdk.GeneralException;

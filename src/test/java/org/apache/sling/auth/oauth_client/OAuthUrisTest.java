@@ -20,8 +20,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
 
-import org.apache.sling.auth.oauth_client.OAuthUris;
 import org.apache.sling.auth.oauth_client.impl.MockOidcConnection;
+import org.apache.sling.auth.oauth_client.impl.OAuthUris;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.apache.sling.testing.mock.sling.junit5.SlingContextExtension;
 import org.junit.jupiter.api.Test;

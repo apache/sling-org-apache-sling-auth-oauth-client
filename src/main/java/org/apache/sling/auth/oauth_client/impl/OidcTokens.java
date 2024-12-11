@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client;
+package org.apache.sling.auth.oauth_client.impl;
 
-public record OAuthTokens(String accessToken, long expiresAt, String refreshToken) {
-
+public record OidcTokens(String accessToken, long expiresAt, String refreshToken, String idToken) {
+    
 }

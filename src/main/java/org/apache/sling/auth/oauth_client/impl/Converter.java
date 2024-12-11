@@ -16,9 +16,6 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
-import org.apache.sling.auth.oauth_client.OAuthTokens;
-import org.apache.sling.auth.oauth_client.OidcTokens;
-
 import com.nimbusds.oauth2.sdk.token.BearerAccessToken;
 import com.nimbusds.oauth2.sdk.token.RefreshToken;
 import com.nimbusds.oauth2.sdk.token.Tokens;
