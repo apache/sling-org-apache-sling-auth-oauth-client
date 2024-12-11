@@ -68,6 +68,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -202,6 +204,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 throw new OAuthCallbackException("Authentication failed", new RuntimeException(toErrorMessage("Error in authentication response", errorResponse)));
             }
 
+            Optional<String> redirect = Optional.ofNullable(clientState.get().redirect());
+
             String authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
 
             String desiredConnectionName = clientState.get().connectionName();
@@ -276,16 +280,15 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             AuthenticationInfo authInfo = new AuthenticationInfo(AUTH_TYPE, userInfo.getSubject().getValue());
             authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
 
-            //format the log message
+            if ( redirect.isEmpty() ) {
+                response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+            } else {
+                response.sendRedirect(URLDecoder.decode(redirect.get(), StandardCharsets.UTF_8));
+            }
+
             logger.info("User {} authenticated", userInfo.getSubject());
             return authInfo;
 
-            //TODO: Manage redirect
-//            if ( redirect.isEmpty() ) {
-//                response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-//            } else {
-//                response.sendRedirect(URLDecoder.decode(redirect.get(), StandardCharsets.UTF_8));
-//            }
 
         } catch (IllegalStateException | IllegalArgumentException | OAuthCallbackException e) {
             logger.error("State check failed", e);
