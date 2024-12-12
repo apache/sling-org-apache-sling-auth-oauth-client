@@ -41,13 +41,13 @@ import com.nimbusds.openid.connect.sdk.UserInfoResponse;
 import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 import org.apache.jackrabbit.oak.spi.security.authentication.credentials.CredentialsSupport;
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentityProvider;
-import org.apache.sling.api.resource.ResourceResolverFactory;
 import org.apache.sling.auth.core.spi.AuthenticationHandler;
 import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.auth.core.spi.DefaultAuthenticationFeedbackHandler;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.OAuthTokenStore;
 import org.apache.sling.auth.oauth_client.OAuthTokens;
+import org.apache.sling.auth.oauth_client.TokenUpdate;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
@@ -66,10 +66,9 @@ import org.slf4j.LoggerFactory;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -87,6 +86,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private static final Logger logger = LoggerFactory.getLogger(OidcAuthenticationHandler.class);
     private static final String AUTH_TYPE = "oidc";
+    public static final String REDIRECT_ATTRIBUTE_NAME = "sling.redirect";
 
     private final SlingRepository repository;
 
@@ -99,15 +99,15 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private  final String callbackUri;
 
-    private ResourceResolverFactory resourceResolverFactory;
+    private TokenUpdate tokenUpdate;
 
+    private String defaultRedirect;
     private static final long serialVersionUID = 1L;
 
     // We don't want leave the cookie lying around for a long time because it it not needed.
     // At the same time, some OAuth user authentication flows take a long time due to
     // consent, account selection, 2FA, etc so we cannot make this too short.
-    private static final int COOKIE_MAX_AGE_SECONDS = 300;
-    public static final String PATH = "/system/sling/oauth/entry-point"; // NOSONAR
+    protected static final int COOKIE_MAX_AGE_SECONDS = 300;
 
     @ObjectClassDefinition(
             name = "Apache Sling Oidc Authentication Handler",
@@ -128,6 +128,11 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 description = "Callback URI")
         String callbackUri() default "callbackUri";
 
+        @AttributeDefinition(name = "Default Redirect",
+                description = "Default Redirect")
+        String defaultRedirect() default "/";
+
+
     }
 
     @Activate
@@ -135,7 +140,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                                      @NotNull BundleContext bundleContext, @Reference List<ClientConnection> connections,
                                      @Reference OAuthStateManager stateManager,
                                      @Reference OAuthTokenStore tokenStore, Config config,
-                                     @Reference ResourceResolverFactory resourceResolverFactory) {
+                                     @Reference TokenUpdate tokenUpdate) {
         this.repository = repository;
         this.connections = connections.stream()
                 .collect(Collectors.toMap( ClientConnection::name, Function.identity()));
@@ -143,7 +148,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.tokenStore = tokenStore;
         this.idp = config.idp();
         this.callbackUri = config.callbackUri();
-        this.resourceResolverFactory = resourceResolverFactory;
+        this.defaultRedirect = config.defaultRedirect();
+        this.tokenUpdate = tokenUpdate;
 
         logger.debug("activate: registering ExternalIdentityProvider");
         bundleContext.registerService(
@@ -168,8 +174,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
             clientState = stateManager.toOAuthState(authResponse.getState());
             if ( !clientState.isPresent() )  {
-                logger.debug("Failed state check: no state found in authorization response");
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                logger.debug("No state found in authorization response");
+                // Return null to indicate that the handler cannot extract credentials
                 return null;
             }
 
@@ -188,9 +194,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             }
 
         } catch (ParseException | URISyntaxException e) {
-            logger.debug("Failed to parse authorization response", e);
-            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            return AuthenticationInfo.FAIL_AUTH;
+            logger.debug("Failed to parse authorization response");
+            return null;
         }
 
         try {
@@ -205,6 +210,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             }
 
             Optional<String> redirect = Optional.ofNullable(clientState.get().redirect());
+            // TODO: find a better pass to pass it?
+            request.setAttribute(REDIRECT_ATTRIBUTE_NAME,redirect);
 
             String authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
 
@@ -246,7 +253,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 throw new OAuthCallbackException("Token exchange error", new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse())));
             }
             // Make the request to userInfo
-            // TODO: fix the cast
+            // TODO: fix the cast and manage OAuthConnections as well?
             HTTPResponse httpResponseUserInfo = new UserInfoRequest(new URI(((OidcConnectionImpl)connection).userInfoUrl()), tokenResponse.toSuccessResponse().getTokens().getAccessToken())
                     .toHTTPRequest()
                     .send();
@@ -279,12 +286,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
             AuthenticationInfo authInfo = new AuthenticationInfo(AUTH_TYPE, userInfo.getSubject().getValue());
             authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
-
-            if ( redirect.isEmpty() ) {
-                response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-            } else {
-                response.sendRedirect(URLDecoder.decode(redirect.get(), StandardCharsets.UTF_8));
-            }
 
             logger.info("User {} authenticated", userInfo.getSubject());
             return authInfo;
@@ -395,25 +396,37 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     
     @Override
     public boolean authenticationSucceeded(HttpServletRequest request, HttpServletResponse response, AuthenticationInfo authInfo) {
-//        Object creds = authInfo.get(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS);
-//        if (creds instanceof OidcAuthCredentials) {
-//            OidcAuthCredentials sc = (OidcAuthCredentials) creds;
-//            Object a = sc.getAttribute(".token");
-//            if (a != null && !a.toString().isEmpty()) {
-//                String token = a.toString();
-//                String repoId = repository.getDescriptor(REPO_DESC_CLUSTER_ID);
-//                if (isEncapsulatedToken(token)) {
-//                    repoId = ENCAPSULATED_TOKEN_SCOPE_VALUE;
-//                }
-//                TokenCookie.update(request,
-//                        response,
-//                        repoId,
-//                        token,
-//                        repository.getDefaultWorkspace(), true);
-//            }
-//        }
-        // TODO how to generate the cookie in pure sling?
-        return super.authenticationSucceeded(request, response, authInfo);
+
+        if (tokenUpdate == null) {
+            logger.debug("TokenUpdate service is not available");
+            return super.authenticationSucceeded(request, response, authInfo);
+        }
+
+
+        Object creds = authInfo.get(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS);
+        if (creds instanceof OidcAuthCredentials) {
+            OidcAuthCredentials sc = (OidcAuthCredentials) creds;
+            Object tokenValueObject = sc.getAttribute(".token");
+            if (tokenValueObject != null && !tokenValueObject.toString().isEmpty()) {
+                String token = tokenValueObject.toString();
+                if (!token.isEmpty()) {
+                    logger.debug("Calling TokenUpdate service to update token cookie");
+                    tokenUpdate.setToken(request, response, repository, token, true);
+                }
+            }
+
+            try {
+                Object redirect = request.getAttribute("sling.redirect");
+                if ( redirect != null && redirect instanceof String ) {
+                    response.sendRedirect(redirect.toString());
+                } else {
+                    response.sendRedirect(defaultRedirect);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return true;
     }
 
 }
