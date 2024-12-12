@@ -16,6 +16,11 @@
  */
 package org.apache.sling.auth.oauth_client.support;
 
+import static org.apache.sling.api.servlets.HttpConstants.METHOD_DELETE;
+import static org.apache.sling.api.servlets.HttpConstants.METHOD_GET;
+import static org.apache.sling.api.servlets.HttpConstants.METHOD_POST;
+import static org.apache.sling.api.servlets.HttpConstants.METHOD_PUT;
+
 import java.io.IOException;
 import java.util.Objects;
 
@@ -24,7 +29,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.SlingHttpServletResponse;
-import org.apache.sling.api.servlets.SlingSafeMethodsServlet;
+import org.apache.sling.api.servlets.SlingAllMethodsServlet;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.OAuthTokenAccess;
 import org.apache.sling.auth.oauth_client.OAuthTokenResponse;
@@ -33,7 +38,18 @@ import org.apache.sling.auth.oauth_client.impl.TokenState;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
+/**
+ * Support class for implementing OAuth-enabled servlets
+ * 
+ * <p>Features:</p>
+ * 
+ * <ul> 
+ *  <li>Handles OAuth token retrieval and refresh</li>
+ *  <li>Starts the authentication flow if no token is available</li>
+ *  <li>Handles invalid access tokens ( {@link #isInvalidAccessTokenException(Exception)} )</li>
+ * </ul>
+ */
+public abstract class OAuthEnabledSlingServlet extends SlingAllMethodsServlet {
 
 	private static final long serialVersionUID = 1L;
 	
@@ -47,12 +63,41 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
         this.connection = Objects.requireNonNull(connection, "connection may not null");
         this.tokenAccess = Objects.requireNonNull(tokenAccess, "tokenAccess may not null");
     }
+    
+    @Override
+    protected void doGet(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
+            throws ServletException, IOException {
+        handleRequestWithToken(request, response, METHOD_GET);
+    }
 
-	@Override
-	protected void doGet(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
+    @Override
+    protected void doPost(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
+            throws ServletException, IOException {
+        handleRequestWithToken(request, response, METHOD_POST);
+    }
+    
+    @Override
+    protected void doDelete(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
+            throws ServletException, IOException {
+        handleRequestWithToken(request, response, METHOD_DELETE);
+    }
+    
+    @Override
+    protected void doPut(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
+            throws ServletException, IOException {
+        handleRequestWithToken(request, response, METHOD_PUT);
+    }
+    
+    @Override
+    protected void doGeneric(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
+            throws ServletException, IOException {
+        handleRequestWithToken(request, response, request.getMethod());
+    }
+    
+	private void handleRequestWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, String method)
 			throws ServletException, IOException {
 	    
-	    if ( request.getUserPrincipal() == null ) {
+	    if ( request.getRemoteUser() == null ) {
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "User is not authenticated");
             return;
 	    }
@@ -64,33 +109,68 @@ public abstract class OAuthEnabledSlingServlet extends SlingSafeMethodsServlet {
 	    
 	    OAuthTokenResponse tokenResponse = tokenAccess.getAccessToken(connection, request, redirectPath);
 	    if (tokenResponse.hasValidToken() ) {
-	        doGetWithPossiblyInvalidToken(request, response, new OAuthToken(TokenState.VALID, tokenResponse.getTokenValue()), redirectPath);
-	    } else {
-	        response.sendRedirect(tokenResponse.getRedirectUri().toString());
-	    }
-	}
-	
-	private void doGetWithPossiblyInvalidToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, OAuthToken token, String redirectPath) throws ServletException, IOException {
-	    try {
-            doGetWithToken(request, response, token.getValue());
-        } catch (ServletException | IOException e) {
+	        OAuthToken token = new OAuthToken(TokenState.VALID, tokenResponse.getTokenValue());
+	        try {
+	        switch ( method ) {
+                case METHOD_GET:
+                    doGetWithToken(request, response, token.getValue());
+                    break;
+                case METHOD_POST:
+                    doPostWithToken(request, response, token.getValue());
+                    break;
+                case METHOD_PUT:
+                    doPutWithToken(request, response, token.getValue());
+                    break;
+                case METHOD_DELETE:
+                    doDeleteWithToken(request, response, token.getValue());
+                    break;
+                default:
+                    doGenericWithToken(request, response, token.getValue());
+                    break;
+	        }
+        } catch (IOException | ServletException e) {
             if (isInvalidAccessTokenException(e)) {
                 logger.warn("Invalid access token, clearing exiting token and restarting OAuth flow", e);
-                OAuthTokenResponse tokenResponse = tokenAccess.clearAccessToken(connection, request, getRedirectPath(request));
-                response.sendRedirect(tokenResponse.getRedirectUri().toString());
+                OAuthTokenResponse newTokenResponse = tokenAccess.clearAccessToken(connection, request, redirectPath);
+                response.sendRedirect(newTokenResponse.getRedirectUri().toString());
             } else {
                 throw e;
             }
         }
-    }
-	
+	    } else {
+	        response.sendRedirect(tokenResponse.getRedirectUri().toString());
+	    }
+	}
+
 	// TODO - do we need this as a protected method?
 	protected @NotNull String getRedirectPath(@NotNull SlingHttpServletRequest request) {
 	    return request.getRequestURI();
 	}
 
-	protected abstract void doGetWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, String accessToken)
-	        throws ServletException, IOException;
+	protected void doGetWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, String accessToken)
+	        throws IOException, ServletException {
+	    handleMethodNotImplemented(request, response);
+	}
+
+	protected void doPostWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, String accessToken)
+	        throws IOException, ServletException {
+	    handleMethodNotImplemented(request, response);
+	}
+
+	protected void doPutWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, String accessToken)
+	        throws IOException, ServletException {
+	    handleMethodNotImplemented(request, response);
+	}
+
+	protected void doDeleteWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, String accessToken)
+	        throws IOException, ServletException {
+	    handleMethodNotImplemented(request, response);
+	}
+	
+    protected void doGenericWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response, String accessToken)
+            throws IOException, ServletException {
+        handleMethodNotImplemented(request, response);
+    }
 	
     protected boolean isInvalidAccessTokenException(Exception e) {
         return false;
