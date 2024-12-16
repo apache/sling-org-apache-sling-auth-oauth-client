@@ -16,8 +16,10 @@
  */
 package org.apache.sling.auth.oauth_client;
 
+import static java.lang.String.format;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -27,17 +29,21 @@ import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.apache.http.Header;
+import org.apache.http.HttpEntity;
 import org.apache.http.NameValuePair;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.cookie.Cookie;
 import org.apache.http.cookie.CookieOrigin;
 import org.apache.http.impl.cookie.DefaultCookieSpec;
@@ -45,6 +51,7 @@ import org.apache.http.message.BasicHeader;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.sling.auth.oauth_client.impl.JcrUserHomeOAuthTokenStore;
 import org.apache.sling.auth.oauth_client.impl.OidcConnectionImpl;
+import org.apache.sling.auth.oauth_client.itbundle.SupportBundle;
 import org.apache.sling.commons.crypto.internal.EnvironmentVariablePasswordProvider;
 import org.apache.sling.commons.crypto.jasypt.internal.JasyptRandomIvGeneratorRegistrar;
 import org.apache.sling.commons.crypto.jasypt.internal.JasyptStandardPbeStringCryptoService;
@@ -53,8 +60,10 @@ import org.apache.sling.testing.clients.SlingClient;
 import org.apache.sling.testing.clients.SlingHttpResponse;
 import org.apache.sling.testing.clients.osgi.OsgiConsoleClient;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -69,6 +78,7 @@ class AuthorizationCodeFlowIT {
     private static final String CRYPTO_SERVICE_PID = JasyptStandardPbeStringCryptoService.class.getName();
     
     private static final String OIDC_CONFIG_PID = OidcConnectionImpl.class.getName();
+    private static SupportBundle supportBundle;
 
     private KeycloakContainer keycloak;
     private SlingClient sling;
@@ -78,6 +88,13 @@ class AuthorizationCodeFlowIT {
     private List<String> configPidsToCleanup = new ArrayList<>();
     private int slingPort;
 
+    
+    @BeforeAll
+    static void createSupportBundle(@TempDir Path tempDir) throws IOException {
+        
+        supportBundle = new SupportBundle(tempDir);
+        supportBundle.generate();
+    }
 
     @BeforeEach
     @SuppressWarnings("resource")
@@ -97,13 +114,16 @@ class AuthorizationCodeFlowIT {
     }
 
     @BeforeEach
-    void initSling() throws ClientException {
+    void initSling() throws ClientException, InterruptedException, TimeoutException {
 
         slingPort = Integer.getInteger("sling.http.port", 8080);
         sling = SlingClient.Builder.create(URI.create("http://localhost:" + slingPort), "admin", "admin").disableRedirectHandling().build();
 
         // ensure all previous connections are cleaned up
         sling.adaptTo(OsgiConsoleClient.class).deleteConfiguration(OIDC_CONFIG_PID + ".keycloak");
+        
+        // install the support bundle
+        supportBundle.install(sling.adaptTo(OsgiConsoleClient.class));
     }
 
     @AfterEach
@@ -120,6 +140,11 @@ class AuthorizationCodeFlowIT {
         // we fall back to cleaning after, which is hopefully reliable enough
         for ( String pid : configPidsToCleanup )
             sling.adaptTo(OsgiConsoleClient.class).deleteConfiguration(pid);
+    }
+    
+    @AfterEach
+    void uninstallBundle() throws ClientException {
+        supportBundle.uninstall(sling.adaptTo(OsgiConsoleClient.class));
     }
 
     @Test
@@ -225,9 +250,19 @@ class AuthorizationCodeFlowIT {
         
         JsonNode keycloakToken = sling.doGetJson(userPath + "/oauth-tokens/" + oidcConnectionName,0,  200);
         String accesToken = keycloakToken.get("access_token").asText();
+
+        // decrypt the token since it's stored encrypted in the user's home
+        HttpEntity postBody = new UrlEncodedFormEntity(List.of(
+                new BasicNameValuePair("token", accesToken),
+                new BasicNameValuePair("cryptoServiceName", "sling-oauth")
+        ));
+        
+        System.err.println(format("Decrypting %s ...", accesToken));
+        
+        String decryptedToken = sling.doPost("/system/sling/decrypt",  postBody, 200).getContent();
         // validate that the JWT is valid; we trust what keycloak has returned but just want to ensure that
         // the token was stored correctly
-        SignedJWT.parse(accesToken);
+        SignedJWT.parse(decryptedToken);
     }
 
     private String getUserPath(SlingClient sling, String authorizableId) throws ClientException {

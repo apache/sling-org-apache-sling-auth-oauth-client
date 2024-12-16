@@ -15,16 +15,10 @@
  * limitations under the License.
  */
 package org.apache.sling.auth.oauth_client.impl;
-
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Base64;
 import java.util.stream.Stream;
 
-import org.apache.sling.auth.oauth_client.impl.CryptoOAuthStateManager;
-import org.apache.sling.auth.oauth_client.impl.OAuthState;
-import org.apache.sling.commons.crypto.CryptoService;
 import org.junit.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -32,20 +26,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import com.nimbusds.oauth2.sdk.id.State;
 
 class CryptoOAuthStateManagerTest {
-    
-    static class StubCryptoService implements CryptoService {
-
-        @Override
-        public String encrypt(String plainText) {
-            return Base64.getEncoder().encodeToString(plainText.getBytes(UTF_8));
-        }
-
-        @Override
-        public String decrypt(String cipherText) {
-            return new String(Base64.getDecoder().decode(cipherText), UTF_8);
-        }
-
-    }
     
     static Stream<OAuthState> states() {
         return Stream.of(new OAuthState("key1", "conn1", "redir1"), 

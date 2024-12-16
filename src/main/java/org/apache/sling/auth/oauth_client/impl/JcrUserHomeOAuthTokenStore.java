@@ -30,7 +30,10 @@ import javax.jcr.Value;
 import org.apache.jackrabbit.api.security.user.User;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.apache.sling.commons.crypto.CryptoService;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +46,13 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
     private static final String PROPERTY_NAME_REFRESH_TOKEN = "refresh_token";
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
+    
+    private CryptoService cryptoService;
+    
+    @Activate
+    public JcrUserHomeOAuthTokenStore(@Reference(target = "(names=sling-oauth)") CryptoService cryptoService) {
+        this.cryptoService = cryptoService;
+    }
 
     @Override
     public OAuthToken getAccessToken(ClientConnection connection, ResourceResolver resolver) {
@@ -75,7 +85,9 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
         if ( tokenValue.length != 1)
             throw new OAuthException(String.format("Unexpected value count %d for token property %s" , tokenValue.length, propertyName));
 
-        return  new OAuthToken(TokenState.VALID, tokenValue[0].getString());
+        String encryptedValue = tokenValue[0].getString();
+        
+        return new OAuthToken(TokenState.VALID, cryptoService.decrypt(encryptedValue));
     }
     
     @Override
@@ -101,8 +113,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
                 expiry = ZonedDateTime.now().plusSeconds(expiresAt);
             }
 
-            String accessToken = tokens.accessToken();
-            currentUser.setProperty(propertyPath(connection, PROPERTY_NAME_ACCESS_TOKEN), session.getValueFactory().createValue(accessToken));
+            currentUser.setProperty(propertyPath(connection, PROPERTY_NAME_ACCESS_TOKEN), createTokenValue(session, tokens.accessToken()));
             if ( expiry != null ) {
                 Calendar cal = GregorianCalendar.from(expiry);
                 currentUser.setProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT), session.getValueFactory().createValue(cal));
@@ -111,9 +122,9 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
 
             if ( tokens.refreshToken() != null ) {
                 String refreshToken = tokens.refreshToken();
-                if ( refreshToken != null )
-                    currentUser.setProperty(propertyPath(connection, PROPERTY_NAME_REFRESH_TOKEN), session.getValueFactory().createValue(refreshToken));
-                else
+                if ( refreshToken != null ) {
+                    currentUser.setProperty(propertyPath(connection, PROPERTY_NAME_REFRESH_TOKEN), createTokenValue(session, refreshToken));
+                } else
                     currentUser.removeProperty(propertyPath(connection, PROPERTY_NAME_REFRESH_TOKEN));
             }
 
@@ -121,6 +132,11 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
         } catch (RepositoryException e) {
             throw new OAuthException(e);
         }
+    }
+    
+    private Value createTokenValue(Session session, String propertyValue) throws RepositoryException {
+        String encryptedValue = cryptoService.encrypt(propertyValue);
+        return session.getValueFactory().createValue(encryptedValue);
     }
 
     private String propertyPath(ClientConnection connection, String propertyName) {

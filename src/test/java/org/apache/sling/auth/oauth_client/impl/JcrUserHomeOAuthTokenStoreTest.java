@@ -24,12 +24,21 @@ import org.apache.jackrabbit.api.security.user.User;
 import org.apache.sling.api.resource.Resource;
 import org.apache.sling.api.resource.ValueMap;
 import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.apache.sling.commons.crypto.CryptoService;
 import org.apache.sling.testing.mock.sling.ResourceResolverType;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
+import org.junit.jupiter.api.BeforeEach;
 
 import com.nimbusds.openid.connect.sdk.token.OIDCTokens;
 
 class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOAuthTokenStore> {
+    
+    private CryptoService cryptoService;
+    
+    @BeforeEach
+    void init() {
+        cryptoService = new StubCryptoService();
+    }
     
     JcrUserHomeOAuthTokenStoreTest() {
         super(MockOidcConnection.DEFAULT_CONNECTION, new SlingContext(ResourceResolverType.JCR_OAK));
@@ -37,18 +46,25 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
 
     @Override
     JcrUserHomeOAuthTokenStore createTokenStore() {
-        return new JcrUserHomeOAuthTokenStore();
+        return new JcrUserHomeOAuthTokenStore(cryptoService);
     }
     
     @Override
     protected void getAccessToken_valid_postCheck(OIDCTokens input) throws RepositoryException {
+        
+        // validate that encryption is applied when storing the access token
+        
         Resource connectionResource = getConnectionResource(connection);
 
         ValueMap connectionProps = connectionResource.getValueMap();
         assertThat(connectionProps)
             .as("stored tokens for connection")
-            .containsOnlyKeys("jcr:primaryType", "access_token")
-            .containsEntry("access_token", input.getAccessToken().getValue());        
+            .containsOnlyKeys("jcr:primaryType", "access_token");
+        
+        assertThat(connectionProps.get("access_token", String.class))
+            .as("encrypted access token")
+            .isNotEqualTo(input.getAccessToken().getValue())
+            .isEqualTo(cryptoService.encrypt(input.getAccessToken().getValue()));
     }
     
     private Resource getConnectionResource(ClientConnection connection) throws RepositoryException {
