@@ -97,28 +97,28 @@
                                 <groupId>org.apache.sling</groupId>
                                 <artifactId>org.apache.sling.starter</artifactId>
                                 <classifier>nosample_base</classifier>
-                                <version>13-SNAPSHOT</version>
+                                <version>13</version>
                                 <type>slingosgifeature</type>
                             </includeArtifact>
                             <includeArtifact>
                                 <groupId>org.apache.sling</groupId>
                                 <artifactId>org.apache.sling.starter</artifactId>
                                 <classifier>oak_persistence_sns</classifier>
-                                <version>13-SNAPSHOT</version>
+                                <version>13</version>
                                 <type>slingosgifeature</type>
                             </includeArtifact>
                             <includeArtifact>
                                 <groupId>org.apache.sling</groupId>
                                 <artifactId>org.apache.sling.starter</artifactId>
                                 <classifier>starter</classifier>
-                                <version>13-SNAPSHOT</version>
+                                <version>13</version>
                                 <type>slingosgifeature</type>
                             </includeArtifact>
                             <includeArtifact>
                                 <groupId>org.apache.sling</groupId>
                                 <artifactId>org.apache.sling.starter</artifactId>
                                 <classifier>composum</classifier>
-                                <version>13-SNAPSHOT</version>
+                                <version>13</version>
                                 <type>slingosgifeature</type>
                             </includeArtifact>
                         </aggregate>
