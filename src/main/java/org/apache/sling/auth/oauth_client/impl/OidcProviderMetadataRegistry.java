@@ -61,4 +61,8 @@ public class OidcProviderMetadataRegistry {
     public @Nullable URI getAuthorizationEndpoint(@NotNull String base) {
         return getProviderMetadata(base).getAuthorizationEndpointURI();
     }
+
+    public @Nullable URI getUserInfoEndpoint(@NotNull String base) {
+        return getProviderMetadata(base).getUserInfoEndpointURI();
+    }
 }

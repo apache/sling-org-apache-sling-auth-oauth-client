@@ -56,6 +56,7 @@ import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicyOption;
 import org.osgi.service.metatype.annotations.AttributeDefinition;
 import org.osgi.service.metatype.annotations.Designate;
@@ -93,7 +94,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private final Map<String, ClientConnection> connections;
     private final OAuthStateManager stateManager;
 
-    private String idp = "oidc";
+    String IDP = "oidc";
 
     private final OAuthTokenStore tokenStore;
 
@@ -102,6 +103,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private TokenUpdate tokenUpdate;
 
     private String defaultRedirect;
+
+    private String defaultConnectionName;
     private static final long serialVersionUID = 1L;
 
     // We don't want leave the cookie lying around for a long time because it it not needed.
@@ -132,6 +135,9 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 description = "Default Redirect")
         String defaultRedirect() default "/";
 
+        @AttributeDefinition(name = "Default Connection Name",
+                description = "Default Connection Name")
+        String defaultConnectionName() default "";
 
     }
 
@@ -140,27 +146,39 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                                      @NotNull BundleContext bundleContext, @Reference List<ClientConnection> connections,
                                      @Reference OAuthStateManager stateManager,
                                      @Reference OAuthTokenStore tokenStore, Config config,
-                                     @Reference TokenUpdate tokenUpdate) {
+                                     @Reference(cardinality = ReferenceCardinality.OPTIONAL) TokenUpdate tokenUpdate) {
+
         this.repository = repository;
         this.connections = connections.stream()
                 .collect(Collectors.toMap( ClientConnection::name, Function.identity()));
         this.stateManager = stateManager;
         this.tokenStore = tokenStore;
-        this.idp = config.idp();
+        this.IDP = config.idp();
         this.callbackUri = config.callbackUri();
         this.defaultRedirect = config.defaultRedirect();
         this.tokenUpdate = tokenUpdate;
+        this.defaultConnectionName = config.defaultConnectionName();
 
         logger.debug("activate: registering ExternalIdentityProvider");
         bundleContext.registerService(
-                new String[]{ExternalIdentityProvider.class.getName(), CredentialsSupport.class.getName()}, new OidcIdentityProvider(idp),
+                new String[]{ExternalIdentityProvider.class.getName(), CredentialsSupport.class.getName()}, new OidcIdentityProvider(IDP),
                 null);
+
+        logger.info("OidcAuthenticationHandler successfully activated");
 
     }
 
-    @Override
+
+
+        @Override
     public AuthenticationInfo extractCredentials(@Nullable HttpServletRequest request, @Nullable HttpServletResponse response) {
         logger.debug("inside extractCredentials");
+
+        AuthenticationInfo authInfo = tokenUpdate.verifyTokenCookie(request, response);
+        if (authInfo != null) {
+            // User has a login token
+            return authInfo;
+        }
 
         StringBuffer requestURL = request.getRequestURL();
         if ( request.getQueryString() != null )
@@ -268,6 +286,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
             // Extract the claims
             UserInfo userInfo = userInfoResponse.toSuccessResponse().getUserInfo();
+            logger.debug("Preferred Username: " + userInfo.getPreferredUsername());
             logger.debug("Subject: " + userInfo.getSubject());
             logger.debug("Email: " + userInfo.getEmailAddress());
             logger.debug("Name: " + userInfo.getGivenName());
@@ -275,7 +294,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             OAuthTokens tokens = Converter.toSlingOAuthTokens(tokenResponse.toSuccessResponse().getTokens());
 
             // Create AuthenticationInfo object
-            OidcAuthCredentials credentials = new OidcAuthCredentials(userInfo.getSubject().getValue(), idp);
+            OidcAuthCredentials credentials = new OidcAuthCredentials(userInfo.getPreferredUsername(), IDP);
             credentials.setAttribute(".token", "");
             credentials.setAttribute("profile/email", userInfo.getEmailAddress());
             credentials.setAttribute("profile/givenName", userInfo.getGivenName());
@@ -284,7 +303,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             //Store the Access Token on user node
             credentials.setAttribute(JcrUserHomeOAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, tokens.accessToken());
 
-            AuthenticationInfo authInfo = new AuthenticationInfo(AUTH_TYPE, userInfo.getSubject().getValue());
+            authInfo = new AuthenticationInfo(AUTH_TYPE, userInfo.getSubject().getValue());
             authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
 
             logger.info("User {} authenticated", userInfo.getSubject());
@@ -321,12 +340,12 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     @Override
     public boolean requestCredentials(HttpServletRequest request, HttpServletResponse response) {
+        logger.debug("inside requestCredentials");
         try {
             String desiredConnectionName = request.getParameter("c");
             if ( desiredConnectionName == null ) {
-                logger.debug("Missing mandatory request parameter 'c'");
-                response.sendError(HttpServletResponse.SC_BAD_REQUEST);
-                return false;
+                logger.debug("Missing mandatory request parameter 'c' using default connection '{}'", defaultConnectionName);
+                desiredConnectionName = defaultConnectionName;
             }
 
             ClientConnection connection = connections.get(desiredConnectionName);
@@ -402,6 +421,11 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             return super.authenticationSucceeded(request, response, authInfo);
         }
 
+        if(tokenUpdate.getLoginCookie(request) !=null) {
+            // A valid login cookie has been sent
+            // According with AuthenticationFeedbackHandler javadoc we send false to confirm that the request is authenticated
+            return false;
+        }
 
         Object creds = authInfo.get(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS);
         if (creds instanceof OidcAuthCredentials) {
@@ -411,7 +435,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 String token = tokenValueObject.toString();
                 if (!token.isEmpty()) {
                     logger.debug("Calling TokenUpdate service to update token cookie");
-                    tokenUpdate.setToken(request, response, repository, token, true);
+                    tokenUpdate.setTokenCookie(request, response, repository, sc);
                 }
             }
 

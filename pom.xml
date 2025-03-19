@@ -214,12 +214,16 @@
                                 <repositoryUrl>file://${project.build.directory}/artifacts</repositoryUrl>
                             </repositoryUrls>
                             <launcherArguments>
+                                <vm-options>
+                                    <value>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:3007</value>
+                                </vm-options>
                                 <frameworkProperties>
                                     <org.osgi.service.http.port>${http.port}</org.osgi.service.http.port>
                                 </frameworkProperties>
                             </launcherArguments>
                             <environmentVariables>
                                 <IT_ENCRYPTION_PASSWORD>random</IT_ENCRYPTION_PASSWORD>
+                                <JAVA_OPS>-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:3007</JAVA_OPS>
                             </environmentVariables>
                             <startTimeoutSeconds>${it.startTimeoutSeconds}</startTimeoutSeconds>
                         </launch>
@@ -303,6 +307,13 @@
             <version>11.19</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+            <version>9.41.1</version>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- Redis persistence support-->
         <dependency>
             <groupId>redis.clients</groupId>
@@ -419,6 +430,18 @@
             <artifactId>org.apache.sling.jcr.resource</artifactId>
             <version>3.0.18</version>
             <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>org.apache.felix.jaas</artifactId>
+            <version>1.0.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
+            <version>4.4.16</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>

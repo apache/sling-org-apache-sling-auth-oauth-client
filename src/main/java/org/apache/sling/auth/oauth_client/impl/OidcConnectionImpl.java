@@ -49,9 +49,9 @@ public class OidcConnectionImpl implements ClientConnection {
         String[] scopes();
         String[] additionalAuthorizationParameters();
 
-        @AttributeDefinition(name = "userInfoEndpoint",
-                description = "UserInfoEndpoint URI")
-        String userInfoEndpoint(); //TODO: get it from well_konwn url
+//        @AttributeDefinition(name = "userInfoEndpoint",
+//                description = "UserInfoEndpoint URI")
+//        String userInfoEndpoint(); //TODO: get it from well_konwn url
 
         String webconsole_configurationFactory_nameHint() default "Name: {name}, base URL: {baseUrl}, clientId: {clientId}";
     }
@@ -91,7 +91,7 @@ public class OidcConnectionImpl implements ClientConnection {
     }
 
     public String userInfoUrl() {
-        return cfg.userInfoEndpoint();
+        return metadataRegistry.getUserInfoEndpoint(cfg.baseUrl()).toString();
     }
 
     public String[] scopes() {

@@ -43,7 +43,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-class OidcAuthCredentials implements Credentials {
+public class OidcAuthCredentials implements Credentials {
 
     private final ExternalIdentityRef userId;
 
@@ -74,7 +74,8 @@ class OidcAuthCredentials implements Credentials {
         }
     }
     
-    @Nullable Object getAttribute(@NotNull String key) {
+    @Nullable
+    public Object getAttribute(@NotNull String key) {
         return attributes.get(key);
     }
 
