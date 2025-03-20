@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
 public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
 
     private static final String PROPERTY_NAME_EXPIRES_AT = "expires_at";
-    private static final String PROPERTY_NAME_ACCESS_TOKEN = "access_token";
+    protected static final String PROPERTY_NAME_ACCESS_TOKEN = "access_token";
     private static final String PROPERTY_NAME_REFRESH_TOKEN = "refresh_token";
 
     private final Logger logger = LoggerFactory.getLogger(getClass());

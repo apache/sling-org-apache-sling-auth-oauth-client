@@ -6,6 +6,8 @@
 .project
 .settings
 .externalToolBuilders
+src/test/test.iml
+src/main/main.iml
 maven-eclipse.xml
 *.swp
 *.iml
