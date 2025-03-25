@@ -24,9 +24,32 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-public interface TokenUpdate {
-    void setTokenCookie(HttpServletRequest request, HttpServletResponse response, SlingRepository repository, Credentials creds);
-    AuthenticationInfo verifyTokenCookie(HttpServletRequest request, HttpServletResponse response);
+/**
+ * This class is responsible for managing authentication cookie.
+ */
+public interface LoginCookieManager {
 
+    /**
+     * Set the login cookie in the response after a successful authentication.
+     * @param request
+     * @param response
+     * @param repository
+     * @param creds
+     */
+    void setLoginCookie(HttpServletRequest request, HttpServletResponse response, SlingRepository repository, Credentials creds);
+
+    /**
+     * Verify the login cookie in the request. If the Authentication Handler do not verify the cookie, return null.
+     * @param request
+     * @param response
+     * @return AuthenticationInfo
+     */
+    AuthenticationInfo verifyLoginCookie(HttpServletRequest request, HttpServletResponse response);
+
+    /**
+     * Get the login cookie from the request. If the Authentication Handler do not verify the cookie, return null.
+     * @param request
+     * @return Cookie
+     */
     Cookie getLoginCookie(HttpServletRequest request);
 }

@@ -47,7 +47,7 @@ import org.apache.sling.auth.core.spi.DefaultAuthenticationFeedbackHandler;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.OAuthTokenStore;
 import org.apache.sling.auth.oauth_client.OAuthTokens;
-import org.apache.sling.auth.oauth_client.TokenUpdate;
+import org.apache.sling.auth.oauth_client.LoginCookieManager;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
@@ -100,7 +100,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private  final String callbackUri;
 
-    private TokenUpdate tokenUpdate;
+    private LoginCookieManager loginCookieManager;
 
     private String defaultRedirect;
 
@@ -146,7 +146,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                                      @NotNull BundleContext bundleContext, @Reference List<ClientConnection> connections,
                                      @Reference OAuthStateManager stateManager,
                                      @Reference OAuthTokenStore tokenStore, Config config,
-                                     @Reference(cardinality = ReferenceCardinality.OPTIONAL) TokenUpdate tokenUpdate) {
+                                     @Reference(cardinality = ReferenceCardinality.OPTIONAL) LoginCookieManager loginCookieManager) {
 
         this.repository = repository;
         this.connections = connections.stream()
@@ -156,7 +156,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.IDP = config.idp();
         this.callbackUri = config.callbackUri();
         this.defaultRedirect = config.defaultRedirect();
-        this.tokenUpdate = tokenUpdate;
+        this.loginCookieManager = loginCookieManager;
         this.defaultConnectionName = config.defaultConnectionName();
 
         logger.debug("activate: registering ExternalIdentityProvider");
@@ -170,11 +170,11 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
 
 
-        @Override
+    @Override
     public AuthenticationInfo extractCredentials(@Nullable HttpServletRequest request, @Nullable HttpServletResponse response) {
         logger.debug("inside extractCredentials");
 
-        AuthenticationInfo authInfo = tokenUpdate.verifyTokenCookie(request, response);
+        AuthenticationInfo authInfo = loginCookieManager.verifyLoginCookie(request, response);
         if (authInfo != null) {
             // User has a login token
             return authInfo;
@@ -416,12 +416,12 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     @Override
     public boolean authenticationSucceeded(HttpServletRequest request, HttpServletResponse response, AuthenticationInfo authInfo) {
 
-        if (tokenUpdate == null) {
+        if (loginCookieManager == null) {
             logger.debug("TokenUpdate service is not available");
             return super.authenticationSucceeded(request, response, authInfo);
         }
 
-        if(tokenUpdate.getLoginCookie(request) !=null) {
+        if(loginCookieManager.getLoginCookie(request) !=null) {
             // A valid login cookie has been sent
             // According with AuthenticationFeedbackHandler javadoc we send false to confirm that the request is authenticated
             return false;
@@ -435,7 +435,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 String token = tokenValueObject.toString();
                 if (!token.isEmpty()) {
                     logger.debug("Calling TokenUpdate service to update token cookie");
-                    tokenUpdate.setTokenCookie(request, response, repository, sc);
+                    loginCookieManager.setLoginCookie(request, response, repository, sc);
                 }
             }
 

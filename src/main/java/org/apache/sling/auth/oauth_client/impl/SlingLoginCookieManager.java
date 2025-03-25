@@ -19,7 +19,7 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.sling.auth.core.spi.AuthenticationInfo;
-import org.apache.sling.auth.oauth_client.TokenUpdate;
+import org.apache.sling.auth.oauth_client.LoginCookieManager;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
@@ -41,10 +41,10 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 
 @Component(
-        service = TokenUpdate.class,
+        service = LoginCookieManager.class,
         immediate = true
 )
-public class SlingTokenUpdate implements TokenUpdate {
+public class SlingLoginCookieManager implements LoginCookieManager {
 
     private static final Logger log = LoggerFactory.getLogger(OidcAuthenticationHandler.class);
     private TokenStore tokenStore;
@@ -87,7 +87,7 @@ public class SlingTokenUpdate implements TokenUpdate {
         this.cookieName = config.cookieName();
     }
     @Override
-    public void setTokenCookie(HttpServletRequest request, HttpServletResponse response, SlingRepository repository, Credentials creds) {
+    public void setLoginCookie(HttpServletRequest request, HttpServletResponse response, SlingRepository repository, Credentials creds) {
 
         long expires = System.currentTimeMillis() + this.sessionTimeout;
 
@@ -106,7 +106,7 @@ public class SlingTokenUpdate implements TokenUpdate {
     }
 
     @Override
-    public AuthenticationInfo verifyTokenCookie(HttpServletRequest request, HttpServletResponse response) {
+    public AuthenticationInfo verifyLoginCookie(HttpServletRequest request, HttpServletResponse response) {
         Cookie cookie = getLoginCookie(request);
         if (cookie == null) {
             return null;
