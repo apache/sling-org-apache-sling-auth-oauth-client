@@ -46,8 +46,11 @@ import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.auth.core.spi.DefaultAuthenticationFeedbackHandler;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.OAuthTokenStore;
-import org.apache.sling.auth.oauth_client.OAuthTokens;
-import org.apache.sling.auth.oauth_client.LoginCookieManager;
+import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
+import org.apache.sling.auth.oauth_client.spi.OAuthState;
+import org.apache.sling.auth.oauth_client.spi.OAuthStateManager;
+import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
+import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
@@ -94,7 +97,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private final Map<String, ClientConnection> connections;
     private final OAuthStateManager stateManager;
 
-    String IDP = "oidc";
+    String idp;
 
     private final OAuthTokenStore tokenStore;
 
@@ -105,6 +108,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private String defaultRedirect;
 
     private String defaultConnectionName;
+
+    private UserInfoProcessor userInfoProcessor;
     private static final long serialVersionUID = 1L;
 
     // We don't want leave the cookie lying around for a long time because it it not needed.
@@ -146,22 +151,25 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                                      @NotNull BundleContext bundleContext, @Reference List<ClientConnection> connections,
                                      @Reference OAuthStateManager stateManager,
                                      @Reference OAuthTokenStore tokenStore, Config config,
-                                     @Reference(cardinality = ReferenceCardinality.OPTIONAL) LoginCookieManager loginCookieManager) {
+                                     @Reference(cardinality = ReferenceCardinality.OPTIONAL, policyOption = ReferencePolicyOption.GREEDY) LoginCookieManager loginCookieManager,
+                                     @Reference(policyOption = ReferencePolicyOption.GREEDY) UserInfoProcessor userInfoProcessor
+    ) {
 
         this.repository = repository;
         this.connections = connections.stream()
                 .collect(Collectors.toMap( ClientConnection::name, Function.identity()));
         this.stateManager = stateManager;
         this.tokenStore = tokenStore;
-        this.IDP = config.idp();
+        this.idp = config.idp();
         this.callbackUri = config.callbackUri();
         this.defaultRedirect = config.defaultRedirect();
         this.loginCookieManager = loginCookieManager;
         this.defaultConnectionName = config.defaultConnectionName();
+        this.userInfoProcessor = userInfoProcessor;
 
         logger.debug("activate: registering ExternalIdentityProvider");
         bundleContext.registerService(
-                new String[]{ExternalIdentityProvider.class.getName(), CredentialsSupport.class.getName()}, new OidcIdentityProvider(IDP),
+                new String[]{ExternalIdentityProvider.class.getName(), CredentialsSupport.class.getName()}, new OidcIdentityProvider(idp),
                 null);
 
         logger.info("OidcAuthenticationHandler successfully activated");
@@ -174,12 +182,14 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     public AuthenticationInfo extractCredentials(@Nullable HttpServletRequest request, @Nullable HttpServletResponse response) {
         logger.debug("inside extractCredentials");
 
+        // Check if the request is authenticated by a oidc login token
         AuthenticationInfo authInfo = loginCookieManager.verifyLoginCookie(request, response);
         if (authInfo != null) {
             // User has a login token
             return authInfo;
         }
 
+        //The request is not authenticate. Check the Authorization Code
         StringBuffer requestURL = request.getRequestURL();
         if ( request.getQueryString() != null )
             requestURL.append('?').append(request.getQueryString());
@@ -228,7 +238,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             }
 
             Optional<String> redirect = Optional.ofNullable(clientState.get().redirect());
-            // TODO: find a better pass to pass it?
+            // TODO: find a better way to pass it?
             request.setAttribute(REDIRECT_ATTRIBUTE_NAME,redirect);
 
             String authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
@@ -286,24 +296,12 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
             // Extract the claims
             UserInfo userInfo = userInfoResponse.toSuccessResponse().getUserInfo();
-            logger.debug("Preferred Username: " + userInfo.getPreferredUsername());
-            logger.debug("Subject: " + userInfo.getSubject());
-            logger.debug("Email: " + userInfo.getEmailAddress());
-            logger.debug("Name: " + userInfo.getGivenName());
-            logger.debug("FamilyName: " + userInfo.getFamilyName());
-            OAuthTokens tokens = Converter.toSlingOAuthTokens(tokenResponse.toSuccessResponse().getTokens());
 
-            // Create AuthenticationInfo object
-            OidcAuthCredentials credentials = new OidcAuthCredentials(userInfo.getPreferredUsername(), IDP);
-            credentials.setAttribute(".token", "");
-            credentials.setAttribute("profile/email", userInfo.getEmailAddress());
-            credentials.setAttribute("profile/givenName", userInfo.getGivenName());
-            credentials.setAttribute("profile/familyName", userInfo.getFamilyName());
-            //TODO: Add more attributes
-            //Store the Access Token on user node
-            credentials.setAttribute(JcrUserHomeOAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, tokens.accessToken());
+            //process credentials
+            OidcAuthCredentials credentials = userInfoProcessor.process(userInfo, tokenResponse, idp);
 
-            authInfo = new AuthenticationInfo(AUTH_TYPE, userInfo.getSubject().getValue());
+            //create authInfo
+            authInfo = new AuthenticationInfo(AUTH_TYPE, userInfoProcessor.getSubject(userInfo));
             authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
 
             logger.info("User {} authenticated", userInfo.getSubject());
@@ -440,7 +438,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             }
 
             try {
-                Object redirect = request.getAttribute("sling.redirect");
+                Object redirect = request.getAttribute(REDIRECT_ATTRIBUTE_NAME);
                 if ( redirect != null && redirect instanceof String ) {
                     response.sendRedirect(redirect.toString());
                 } else {

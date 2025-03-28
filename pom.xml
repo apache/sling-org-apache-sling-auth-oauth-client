@@ -41,7 +41,15 @@
 
 	<build>
 		<plugins>
-			<plugin>
+            <plugin>
+                <groupId>biz.aQute.bnd</groupId>
+                <artifactId>bnd-maven-plugin</artifactId>
+                <extensions>true</extensions>
+                <configuration>
+                    <bnd><![CDATA[-exportcontents:org.apache.sling.auth.oauth_client.spi]]></bnd>
+                </configuration>
+            </plugin>
+            <plugin>
 				<groupId>biz.aQute.bnd</groupId>
 				<artifactId>bnd-maven-plugin</artifactId>
 			</plugin>
@@ -307,13 +315,13 @@
             <version>11.19</version>
             <scope>provided</scope>
         </dependency>
-        <dependency>
+<!--        <dependency>
             <groupId>com.nimbusds</groupId>
             <artifactId>nimbus-jose-jwt</artifactId>
             <version>9.41.1</version>
             <scope>provided</scope>
         </dependency>
-
+-->
         <!-- Redis persistence support-->
         <dependency>
             <groupId>redis.clients</groupId>

@@ -19,7 +19,8 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.sling.auth.core.spi.AuthenticationInfo;
-import org.apache.sling.auth.oauth_client.LoginCookieManager;
+import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
+import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
@@ -42,7 +43,10 @@ import java.security.NoSuchAlgorithmException;
 
 @Component(
         service = LoginCookieManager.class,
-        immediate = true
+        immediate = true,
+        property = {
+                "service.ranking:Integer=10"
+        }
 )
 public class SlingLoginCookieManager implements LoginCookieManager {
 

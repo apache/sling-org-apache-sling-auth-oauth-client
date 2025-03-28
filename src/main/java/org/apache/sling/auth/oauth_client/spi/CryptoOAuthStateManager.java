@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client.impl;
+package org.apache.sling.auth.oauth_client.spi;
 
 import java.util.Optional;
 
@@ -29,7 +29,12 @@ import org.slf4j.LoggerFactory;
 
 import com.nimbusds.oauth2.sdk.id.State;
 
-@Component
+@Component(
+        service = OAuthStateManager.class,
+        property = {
+                "service.ranking:Integer=10"
+        }
+)
 public class CryptoOAuthStateManager implements OAuthStateManager {
 
     private static final Logger logger = LoggerFactory.getLogger(CryptoOAuthStateManager.class);

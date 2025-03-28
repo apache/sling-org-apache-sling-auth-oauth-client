@@ -30,7 +30,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client.impl;
+package org.apache.sling.auth.oauth_client.spi;
 
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentityRef;
 import org.jetbrains.annotations.NotNull;
@@ -51,24 +51,27 @@ public class OidcAuthCredentials implements Credentials {
     private final Map<String,Object> attributes = new HashMap<>();
     private final Set<String> groups = new HashSet<>();
 
-    OidcAuthCredentials(@NotNull String userId, @NotNull String idp) {
+    public OidcAuthCredentials(@NotNull String userId, @NotNull String idp) {
         this.userId = new ExternalIdentityRef(userId, idp);
         this.idp = idp;
     }
 
-    @NotNull String getUserId() {
+    @NotNull
+    public String getUserId() {
         return userId.getId();
     }
 
-    @NotNull String getIdp() {
+    @NotNull
+    public String getIdp() {
         return idp;
     }
 
-    @NotNull Map<String,Object> getAttributes() {
+    @NotNull
+    public Map<String,Object> getAttributes() {
         return Collections.unmodifiableMap(attributes);
     }
     
-    void setAttribute(@NotNull String key, @NotNull String value) {
+    public void setAttribute(@NotNull String key, @NotNull String value) {
         synchronized (attributes) {
             attributes.put(key, value);
         }
@@ -79,11 +82,13 @@ public class OidcAuthCredentials implements Credentials {
         return attributes.get(key);
     }
 
-    void addGroup(@NotNull String group) {
+    public void addGroup(@NotNull String group) {
         this.groups.add(group);
     }
 
-    @NotNull Iterable<String> getGroups() {
+    @NotNull
+    public Iterable<String> getGroups() {
         return groups;
     }
+
  }

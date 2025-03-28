@@ -348,7 +348,7 @@ class AuthorizationCodeFlowIT {
         // Create a user-agent NameValues to simulate a browser and add it to a list of headers to be sent with the request
         Header userAgentHeader = new BasicHeader("User-Agent", "Mozilla/5.0");
 
-        SlingHttpResponse entryPointResponse = slingUser.doGet(TEST_PATH+".html", null, List.of(userAgentHeader), 302);
+        SlingHttpResponse entryPointResponse = slingUser.doGet(TEST_PATH+".json", null, List.of(userAgentHeader), 302);
         Header locationHeader = entryPointResponse.getFirstHeader("location");
         assertThat(locationHeader.getElements()).as("Location header value from entry-point request")
                 .singleElement().asString().startsWith("http://localhost:" + keycloakPort);
@@ -378,7 +378,7 @@ class AuthorizationCodeFlowIT {
 
         List<String> authFormRequestCookies = renderLoginFormResponse.headers().allValues("set-cookie");
 
-        // Post credentils to leycloak
+        // Post credentils to keycloak
         Map<String, String> authData = Map.of("username", "test", "password", "test", "credentialId", "");
         String requestBody = authData.entrySet().stream()
                 .map( e -> URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8) + "=" + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8))
@@ -419,7 +419,7 @@ class AuthorizationCodeFlowIT {
         headers.add(new BasicHeader("Cookie", loginCookieHeader.getValue()));
 
         //Get the page from sling with login cookie
-        slingUser.doGet(TEST_PATH+".html",new ArrayList<>(), headers, 200);
+        slingUser.doGet(TEST_PATH + ".json", new ArrayList<>(), headers, 200);
     }
 
     private String getUserPath(SlingClient sling, String authorizableId) throws ClientException {

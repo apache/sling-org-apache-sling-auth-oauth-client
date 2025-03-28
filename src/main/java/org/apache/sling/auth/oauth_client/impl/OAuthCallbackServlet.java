@@ -42,6 +42,8 @@ import org.apache.sling.auth.core.AuthConstants;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.OAuthTokenStore;
 import org.apache.sling.auth.oauth_client.OAuthTokens;
+import org.apache.sling.auth.oauth_client.spi.OAuthState;
+import org.apache.sling.auth.oauth_client.spi.OAuthStateManager;
 import org.apache.sling.servlets.annotations.SlingServletPaths;
 import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Activate;

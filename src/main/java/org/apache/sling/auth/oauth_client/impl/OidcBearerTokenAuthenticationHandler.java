@@ -35,7 +35,7 @@ import org.apache.sling.auth.core.spi.AuthenticationHandler;
 import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.auth.core.spi.DefaultAuthenticationFeedbackHandler;
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.apache.sling.auth.oauth_client.TokenUpdate;
+import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.jetbrains.annotations.NotNull;
 import org.osgi.framework.BundleContext;
@@ -107,7 +107,7 @@ public class OidcBearerTokenAuthenticationHandler extends DefaultAuthenticationF
     public OidcBearerTokenAuthenticationHandler(@Reference(policyOption = ReferencePolicyOption.GREEDY) @NotNull SlingRepository repository,
                                                 @NotNull BundleContext bundleContext, @Reference List<ClientConnection> connections,
                                                 OidcBearerTokenAuthenticationHandler.Config config,
-                                                @Reference(cardinality = ReferenceCardinality.OPTIONAL) TokenUpdate tokenUpdate) {
+                                                @Reference(cardinality = ReferenceCardinality.OPTIONAL) LoginCookieManager loginCookieManager) {
         this.connections = connections.stream()
                 .collect(Collectors.toMap( ClientConnection::name, Function.identity()));
         this.idp = config.idp();
