@@ -19,6 +19,9 @@ package org.apache.sling.auth.oauth_client.impl;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
 /**
  * Information about an OAuth token
  * 
