@@ -20,11 +20,6 @@ import static org.osgi.service.component.annotations.ConfigurationPolicy.REQUIRE
 
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.apache.sling.auth.oauth_client.OAuthException;
-import org.apache.sling.auth.oauth_client.OAuthToken;
-import org.apache.sling.auth.oauth_client.OAuthTokenStore;
-import org.apache.sling.auth.oauth_client.OAuthTokens;
-import org.apache.sling.auth.oauth_client.TokenState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Activate;
@@ -41,7 +36,7 @@ import redis.clients.jedis.JedisPool;
 public class RedisOAuthTokenStore implements OAuthTokenStore {
     
     @ObjectClassDefinition(name = "Redis OAuth Token Store")
-    @interface Config {
+    static @interface Config {
         @AttributeDefinition(name = "Redis URL")
         String redisUrl();
     }

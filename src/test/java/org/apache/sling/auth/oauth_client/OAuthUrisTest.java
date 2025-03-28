@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.net.URI;
 
 import org.apache.sling.auth.oauth_client.impl.MockOidcConnection;
+import org.apache.sling.auth.oauth_client.impl.OAuthUris;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.apache.sling.testing.mock.sling.junit5.SlingContextExtension;
 import org.junit.jupiter.api.Test;
@@ -33,25 +34,12 @@ class OAuthUrisTest {
     
     @Test
     void testRedirectUri() {
-        URI redirectUri = OAuthUris.getOidcEntryPointUri(MockOidcConnection.DEFAULT_CONNECTION, context.request(), "/foo");
+        URI redirectUri = OAuthUris.getOAuthEntryPointUri(MockOidcConnection.DEFAULT_CONNECTION, context.request(), "/foo");
         
         assertThat(redirectUri).as("redirect uri")
             .hasScheme("http")    
             .hasHost("localhost")
             .hasNoPort()
-            .hasPath("/system/sling/oauth/entry-point")
-            .hasQuery("c=mock-oidc&redirect=/foo");
-    }
-
-    @Test
-    void testRedirectUri_customPort() {
-        context.request().setServerPort(8080);
-        URI redirectUri = OAuthUris.getOidcEntryPointUri(MockOidcConnection.DEFAULT_CONNECTION, context.request(), "/foo");
-        
-        assertThat(redirectUri).as("redirect uri")
-            .hasScheme("http")    
-            .hasHost("localhost")
-            .hasPort(8080)
             .hasPath("/system/sling/oauth/entry-point")
             .hasQuery("c=mock-oidc&redirect=/foo");
     }

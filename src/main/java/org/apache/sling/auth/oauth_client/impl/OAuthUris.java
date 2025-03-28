@@ -14,29 +14,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client;
+package org.apache.sling.auth.oauth_client.impl;
 
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 import org.apache.sling.api.SlingHttpServletRequest;
-import org.apache.sling.auth.oauth_client.impl.OAuthEntryPointServlet;
+import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.jetbrains.annotations.NotNull;
 
 public abstract class OAuthUris {
 
     /**
-     * Generates a local URI to the OIDC entry point servlet
+     * Generates a local URI to the Sling OAuth entry point servlet
      * 
-     * <p>The URI can be used as-is to send a redirect to the user and start the OIDC flow.</p>
+     * <p>The URI can be used as-is to send a redirect to the user and start the OAuth flow.</p>
      * 
-     * @param connection The connection to start the OIDC flow for
+     * @param connection The connection to start the OAuth flow for
      * @param request The current request
-     * @param redirectPath The local redirect path to use after completing the OIDC flow
+     * @param redirectPath The local redirect path to use after completing the OAuth flow
      * @return a local URI
      */
-    public static @NotNull URI getOidcEntryPointUri(@NotNull ClientConnection connection, @NotNull SlingHttpServletRequest request, @NotNull String redirectPath) {
+    public static @NotNull URI getOAuthEntryPointUri(@NotNull ClientConnection connection, @NotNull SlingHttpServletRequest request, @NotNull String redirectPath) {
         StringBuilder uri = new StringBuilder();
         uri.append(request.getScheme()).append("://").append(request.getServerName());
         boolean needsExplicitPort = ( "https".equals(request.getScheme()) && request.getServerPort() != 443 )
@@ -47,7 +47,7 @@ public abstract class OAuthUris {
         }
         uri.append(OAuthEntryPointServlet.PATH).append("?c=").append(connection.name());
         uri.append("&redirect=").append(URLEncoder.encode(redirectPath, StandardCharsets.UTF_8));
-        
+
         return URI.create(uri.toString());
     }
     

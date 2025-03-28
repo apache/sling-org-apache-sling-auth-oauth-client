@@ -20,6 +20,7 @@ import java.net.URI;
 import java.util.Optional;
 
 import org.apache.sling.api.SlingHttpServletRequest;
+import org.apache.sling.auth.oauth_client.impl.OAuthUris;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -78,6 +79,6 @@ public class OAuthTokenResponse {
         if ( token.isPresent() )
             throw new IllegalStateException("Access token is present, will not generate a new redirect URI.");
         
-        return OAuthUris.getOidcEntryPointUri(connection, request, redirectPath);
+        return OAuthUris.getOAuthEntryPointUri(connection, request, redirectPath);
     }
 }

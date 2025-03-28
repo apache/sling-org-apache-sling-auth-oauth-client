@@ -27,17 +27,24 @@
     </parent>
 
 	<artifactId>org.apache.sling.auth.oauth-client</artifactId>
-	<version>0.1-SNAPSHOT</version>
+	<version>0.1.1-SNAPSHOT</version>
 
-	<name>Apache Sling OAuth client</name>
+	<name>Apache Sling OAuth Client</name>
 	<description>Apache Sling OAuth 2.0 client with OIDC support</description>
 
     <properties>
         <sling.java.version>17</sling.java.version>
-        <project.build.outputTimestamp>1</project.build.outputTimestamp>
+        <project.build.outputTimestamp>1734706953</project.build.outputTimestamp>
         <bnd.baseline.skip>true</bnd.baseline.skip>
         <it.startTimeoutSeconds>60</it.startTimeoutSeconds>
 	</properties>
+
+    <scm>
+        <connection>scm:git:https://gitbox.apache.org/repos/asf/sling-org-apache-sling-auth-oauth-client.git</connection>
+        <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/sling-org-apache-sling-auth-oauth-client.git</developerConnection>
+        <url>https://github.com/apache/sling-org-apache-sling-auth-oauth-client.git</url>
+      <tag>org.apache.sling.auth.oauth-client-0.1.0</tag>
+  </scm>
 
 	<build>
 		<plugins>
@@ -98,28 +105,28 @@
                                 <groupId>org.apache.sling</groupId>
                                 <artifactId>org.apache.sling.starter</artifactId>
                                 <classifier>nosample_base</classifier>
-                                <version>13-SNAPSHOT</version>
+                                <version>13</version>
                                 <type>slingosgifeature</type>
                             </includeArtifact>
                             <includeArtifact>
                                 <groupId>org.apache.sling</groupId>
                                 <artifactId>org.apache.sling.starter</artifactId>
                                 <classifier>oak_persistence_sns</classifier>
-                                <version>13-SNAPSHOT</version>
+                                <version>13</version>
                                 <type>slingosgifeature</type>
                             </includeArtifact>
                             <includeArtifact>
                                 <groupId>org.apache.sling</groupId>
                                 <artifactId>org.apache.sling.starter</artifactId>
                                 <classifier>starter</classifier>
-                                <version>13-SNAPSHOT</version>
+                                <version>13</version>
                                 <type>slingosgifeature</type>
                             </includeArtifact>
                             <includeArtifact>
                                 <groupId>org.apache.sling</groupId>
                                 <artifactId>org.apache.sling.starter</artifactId>
                                 <classifier>composum</classifier>
-                                <version>13-SNAPSHOT</version>
+                                <version>13</version>
                                 <type>slingosgifeature</type>
                             </includeArtifact>
                         </aggregate>
@@ -315,13 +322,6 @@
             <version>11.19</version>
             <scope>provided</scope>
         </dependency>
-<!--        <dependency>
-            <groupId>com.nimbusds</groupId>
-            <artifactId>nimbus-jose-jwt</artifactId>
-            <version>9.41.1</version>
-            <scope>provided</scope>
-        </dependency>
--->
         <!-- Redis persistence support-->
         <dependency>
             <groupId>redis.clients</groupId>
@@ -381,7 +381,7 @@
         <dependency>
             <groupId>org.apache.sling</groupId>
             <artifactId>org.apache.sling.testing.clients</artifactId>
-            <version>3.0.18</version>
+            <version>3.1.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>

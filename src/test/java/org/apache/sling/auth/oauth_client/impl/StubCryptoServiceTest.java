@@ -14,24 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client;
+package org.apache.sling.auth.oauth_client.impl;
 
-import org.jetbrains.annotations.NotNull;
-/**
- * Identifies an OAuth or OIDC connection
- * 
- * <p>Used in the public API to identify the client connection for which to retrieve or clear tokens.</p>
- * 
- * <p>Connections are published as OSGi services and should be retrieved using the <code>name</code> property.</p>
- * 
- * <pre>{@code private @Reference(target = "(name=my-connection-name)")} ClientConnection connection;}</pre>
- * 
- * @see OAuthTokenAccess
- */
-public interface ClientConnection {
+import static org.assertj.core.api.Assertions.assertThat;
 
-    /**
-     * @return the name of the connection
-     */
-    @NotNull String name();
+import org.junit.jupiter.api.Test;
+
+class StubCryptoServiceTest {
+
+    @Test
+    void encryptAndDecryptAreSymmetric() {
+        StubCryptoService stubCryptoService = new StubCryptoService();
+        assertThat(stubCryptoService.decrypt(stubCryptoService.encrypt("test"))).isEqualTo("test");
+    }
+    
+    @org.junit.Test
+    void encryptIsNotEqualToInput() {
+        StubCryptoService stubCryptoService = new StubCryptoService();
+        assertThat(stubCryptoService.encrypt("test")).isNotEqualTo("test");
+    }
+
 }

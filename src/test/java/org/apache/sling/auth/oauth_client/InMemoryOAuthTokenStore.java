@@ -22,7 +22,11 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import org.apache.sling.api.resource.ResourceResolver;
-import org.jetbrains.annotations.NotNull;
+import org.apache.sling.auth.oauth_client.impl.OAuthException;
+import org.apache.sling.auth.oauth_client.impl.OAuthToken;
+import org.apache.sling.auth.oauth_client.impl.OAuthTokenStore;
+import org.apache.sling.auth.oauth_client.impl.OAuthTokens;
+import org.apache.sling.auth.oauth_client.impl.TokenState;
 
 /**
  * In-memory, volatile token store implementation
@@ -48,13 +52,13 @@ public class InMemoryOAuthTokenStore implements OAuthTokenStore {
     private final Map<Key, Value> storage = new HashMap<>();
 
     @Override
-    public void persistTokens(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver, @NotNull OAuthTokens tokens)
+    public void persistTokens(ClientConnection connection, ResourceResolver resolver, OAuthTokens tokens)
             throws OAuthException {
         storage.put(new Key(connection.name(), resolver.getUserID()), new Value(tokens));
     }
 
     @Override
-    public @NotNull OAuthToken getRefreshToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
+    public OAuthToken getRefreshToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException {
         Value value = storage.get(new Key(connection.name(), resolver.getUserID()));
         if (value == null || value.tokens == null || value.tokens.refreshToken() == null)
             return new OAuthToken(TokenState.MISSING, null);
@@ -63,7 +67,7 @@ public class InMemoryOAuthTokenStore implements OAuthTokenStore {
     }
 
     @Override
-    public @NotNull OAuthToken getAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
+    public OAuthToken getAccessToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException {
         Value value = storage.get(new Key(connection.name(), resolver.getUserID()));
         if (value == null || value.tokens == null || value.tokens.accessToken() == null )
             return new OAuthToken(TokenState.MISSING, null);
@@ -76,7 +80,7 @@ public class InMemoryOAuthTokenStore implements OAuthTokenStore {
     }
 
     @Override
-    public void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException {
+    public void clearAccessToken(ClientConnection connection, ResourceResolver resolver) throws OAuthException {
         Key key = new Key(connection.name(), resolver.getUserID());
         Value value = storage.get(key);
         

@@ -16,8 +16,17 @@
  */
 package org.apache.sling.auth.oauth_client;
 
-import org.jetbrains.annotations.Nullable;
+import org.apache.sling.auth.core.spi.AuthenticationInfo;
+import org.apache.sling.jcr.api.SlingRepository;
 
-public record OidcTokens(@Nullable String accessToken, long expiresAt, @Nullable String refreshToken, @Nullable String idToken) {
-    
+import javax.jcr.Credentials;
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+public interface TokenUpdate {
+    void setTokenCookie(HttpServletRequest request, HttpServletResponse response, SlingRepository repository, Credentials creds);
+    AuthenticationInfo verifyTokenCookie(HttpServletRequest request, HttpServletResponse response);
+
+    Cookie getLoginCookie(HttpServletRequest request);
 }

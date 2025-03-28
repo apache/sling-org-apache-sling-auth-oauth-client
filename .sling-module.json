@@ -7,7 +7,6 @@
         "additionalMavenParams": "-Dit.startTimeoutSeconds=120",
         "operatingSystems": [
             "linux"
-        ],
-        "sonarQubeEnabled": false
+        ]
     }
 }

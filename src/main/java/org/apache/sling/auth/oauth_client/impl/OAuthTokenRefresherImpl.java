@@ -20,9 +20,6 @@ import java.io.IOException;
 import java.net.URI;
 
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.apache.sling.auth.oauth_client.OAuthException;
-import org.apache.sling.auth.oauth_client.OAuthTokenRefresher;
-import org.apache.sling.auth.oauth_client.OAuthTokens;
 import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Component;
 

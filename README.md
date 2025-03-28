@@ -1,12 +1,12 @@
 [![Apache Sling](https://sling.apache.org/res/logos/sling.png)](https://sling.apache.org)
 
-&#32;[![Build Status](https://ci-builds.apache.org/job/Sling/job/modules/job/sling-org-apache-sling-auth-oauth-client/job/master/badge/icon)](https://ci-builds.apache.org/job/Sling/job/modules/job/sling-org-apache-sling-auth-oauth-client/job/master/)&#32;[![auth](https://sling.apache.org/badges/group-auth.svg)](https://github.com/apache/sling-aggregator/blob/master/docs/groups/auth.md) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+&#32;[![Build Status](https://ci-builds.apache.org/job/Sling/job/modules/job/sling-org-apache-sling-auth-oauth-client/job/master/badge/icon)](https://ci-builds.apache.org/job/Sling/job/modules/job/sling-org-apache-sling-auth-oauth-client/job/master/)&#32;[![Test Status](https://img.shields.io/jenkins/tests.svg?jobUrl=https://ci-builds.apache.org/job/Sling/job/modules/job/sling-org-apache-sling-auth-oauth-client/job/master/)](https://ci-builds.apache.org/job/Sling/job/modules/job/sling-org-apache-sling-auth-oauth-client/job/master/test/?width=800&height=600)&#32;[![Sonarcloud Status](https://sonarcloud.io/api/project_badges/measure?project=apache_sling-org-apache-sling-auth-oauth-client&metric=alert_status)](https://sonarcloud.io/dashboard?id=apache_sling-org-apache-sling-auth-oauth-client)&#32;[![auth](https://sling.apache.org/badges/group-auth.svg)](https://github.com/apache/sling-aggregator/blob/master/docs/groups/auth.md) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 # Apache Sling OAuth 2.0 client with OIDC support
 
 > [!IMPORTANT]
 > The Java APIs exported by this bundle are considered **experimental** and are marked as being
-> @ProviderType. Expect them to change frequently until they are considered stable.
+> @ProviderType. The APIs may change in an incompatible way in future minor releases.
 
 This bundle adds support for Sling-based applications to function as an OAuth 2.0 client 
 ([RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749)) and implements the basis for being an 
@@ -367,7 +367,6 @@ $ docker run --rm --volume $(pwd)/keycloak-data:/opt/keycloak/data -p 8081:8080 
 
 ### Future plans
 
-- make the OAuthEnabledSlingServlet handle any method, not just get
 - explore an AuthenticationHandler that can optionally expose the access tokens
 - investigate PKCE (RFC 7636)
 - investigate encrypted client-side storage of tokens

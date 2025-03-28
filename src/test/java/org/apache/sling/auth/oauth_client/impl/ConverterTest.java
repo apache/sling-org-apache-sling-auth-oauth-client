@@ -18,7 +18,6 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.apache.sling.auth.oauth_client.OidcTokens;
 import org.apache.sling.auth.oauth_client.impl.Converter;
 import org.junit.jupiter.api.Test;
 

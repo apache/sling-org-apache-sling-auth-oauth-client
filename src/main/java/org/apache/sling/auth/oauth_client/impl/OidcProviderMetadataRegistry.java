@@ -21,7 +21,6 @@ import java.net.URI;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import org.apache.sling.auth.oauth_client.OAuthException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Component;
@@ -33,7 +32,7 @@ import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
 /**
  * A registry for provider metadata
  * 
- * <p>Encapsulates the logic for retrieving the {@link OIDCProviderMetadata} for a given 
+ * <p>Encapsulates the logic for retrieving the {@link OIDCProviderMetadata} for a given
  * connection.</p>
  * 
  * <p>Maintains a best-effort, unbounded, cache for the metadata, on the assumption that

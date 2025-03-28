@@ -14,24 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client;
+package org.apache.sling.auth.oauth_client.impl;
 
-import org.jetbrains.annotations.NotNull;
-/**
- * Identifies an OAuth or OIDC connection
- * 
- * <p>Used in the public API to identify the client connection for which to retrieve or clear tokens.</p>
- * 
- * <p>Connections are published as OSGi services and should be retrieved using the <code>name</code> property.</p>
- * 
- * <pre>{@code private @Reference(target = "(name=my-connection-name)")} ClientConnection connection;}</pre>
- * 
- * @see OAuthTokenAccess
- */
-public interface ClientConnection {
+public class OAuthException extends RuntimeException {
 
-    /**
-     * @return the name of the connection
-     */
-    @NotNull String name();
+    private static final long serialVersionUID = 1L;
+
+    public OAuthException() {
+        super();
+    }
+
+    public OAuthException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public OAuthException(String message) {
+        super(message);
+    }
+
+    public OAuthException(Throwable cause) {
+        super(cause);
+    }
+
 }

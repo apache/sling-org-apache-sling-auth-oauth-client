@@ -40,10 +40,6 @@ import org.apache.sling.api.SlingHttpServletResponse;
 import org.apache.sling.api.servlets.SlingAllMethodsServlet;
 import org.apache.sling.auth.core.AuthConstants;
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.apache.sling.auth.oauth_client.OAuthTokenStore;
-import org.apache.sling.auth.oauth_client.OAuthTokens;
-import org.apache.sling.auth.oauth_client.spi.OAuthState;
-import org.apache.sling.auth.oauth_client.spi.OAuthStateManager;
 import org.apache.sling.servlets.annotations.SlingServletPaths;
 import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Activate;
@@ -171,7 +167,7 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
             String authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
             
             String desiredConnectionName = clientState.get().connectionName();
-            if ( desiredConnectionName == null || desiredConnectionName.isEmpty() )
+            if ( desiredConnectionName.isEmpty() )
                 throw new IllegalArgumentException("No connection found in clientState");
             
             ClientConnection connection = connections.get(desiredConnectionName);

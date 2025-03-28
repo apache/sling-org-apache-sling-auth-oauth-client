@@ -18,6 +18,7 @@ package org.apache.sling.auth.oauth_client;
 
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.resource.ResourceResolver;
+import org.apache.sling.auth.oauth_client.impl.OAuthTokenStore;
 import org.jetbrains.annotations.NotNull;
 
 /**

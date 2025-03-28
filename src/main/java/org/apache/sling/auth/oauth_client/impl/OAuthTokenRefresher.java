@@ -14,26 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client;
+package org.apache.sling.auth.oauth_client.impl;
 
-public class OAuthException extends RuntimeException {
+import org.apache.sling.auth.oauth_client.ClientConnection;
 
-    private static final long serialVersionUID = 1L;
+import org.jetbrains.annotations.NotNull;
 
-    public OAuthException() {
-        super();
-    }
+import org.jetbrains.annotations.NotNull;
 
-    public OAuthException(String message, Throwable cause) {
-        super(message, cause);
-    }
+import org.jetbrains.annotations.NotNull;
 
-    public OAuthException(String message) {
-        super(message);
-    }
+public interface OAuthTokenRefresher {
 
-    public OAuthException(Throwable cause) {
-        super(cause);
-    }
-
+    /**
+     * Refreshes the OAuth tokens based on the supplied refresh token
+     * 
+     * <p>It is the responsibility of the invoker to persist the returned tokens.</p> 
+     * 
+     * @param connection The connection to refresh the tokens for
+     * @param refreshToken An existing refresh token
+     * @return OAuth tokens
+     * @throws OAuthException in case anything goes wrong
+     */
+    @NotNull OAuthTokens refreshTokens(@NotNull ClientConnection connection, @NotNull String refreshToken) throws OAuthException;
 }
