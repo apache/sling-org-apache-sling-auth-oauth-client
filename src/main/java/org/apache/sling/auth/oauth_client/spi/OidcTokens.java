@@ -14,10 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client.impl;
+package org.apache.sling.auth.oauth_client.spi;
 
 import org.jetbrains.annotations.Nullable;
 
-public record OAuthTokens(@Nullable String accessToken, long expiresAt, @Nullable String refreshToken) {
-
+public record OidcTokens(@Nullable String accessToken, long expiresAt, @Nullable String refreshToken, @Nullable String idToken) {
+    
 }

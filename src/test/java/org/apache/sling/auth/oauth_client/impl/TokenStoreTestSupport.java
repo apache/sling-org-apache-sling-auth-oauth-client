@@ -20,6 +20,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.concurrent.TimeUnit;
 
+import org.apache.sling.auth.oauth_client.spi.Converter;
+import org.apache.sling.auth.oauth_client.spi.OAuthToken;
+import org.apache.sling.auth.oauth_client.spi.OAuthTokenStore;
+import org.apache.sling.auth.oauth_client.spi.TokenState;
 import org.apache.sling.jackrabbit.usermanager.impl.AuthorizableAdapterFactory;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.apache.sling.testing.mock.sling.junit5.SlingContextExtension;

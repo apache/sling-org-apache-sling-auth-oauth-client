@@ -20,6 +20,11 @@ import static org.osgi.service.component.annotations.ConfigurationPolicy.REQUIRE
 
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.apache.sling.auth.oauth_client.spi.OAuthException;
+import org.apache.sling.auth.oauth_client.spi.OAuthToken;
+import org.apache.sling.auth.oauth_client.spi.OAuthTokenStore;
+import org.apache.sling.auth.oauth_client.spi.OAuthTokens;
+import org.apache.sling.auth.oauth_client.spi.TokenState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Activate;

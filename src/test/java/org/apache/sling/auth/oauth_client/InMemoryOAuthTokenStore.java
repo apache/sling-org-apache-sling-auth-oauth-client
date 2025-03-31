@@ -22,11 +22,11 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import org.apache.sling.api.resource.ResourceResolver;
-import org.apache.sling.auth.oauth_client.impl.OAuthException;
-import org.apache.sling.auth.oauth_client.impl.OAuthToken;
-import org.apache.sling.auth.oauth_client.impl.OAuthTokenStore;
-import org.apache.sling.auth.oauth_client.impl.OAuthTokens;
-import org.apache.sling.auth.oauth_client.impl.TokenState;
+import org.apache.sling.auth.oauth_client.spi.OAuthException;
+import org.apache.sling.auth.oauth_client.spi.OAuthToken;
+import org.apache.sling.auth.oauth_client.spi.OAuthTokenStore;
+import org.apache.sling.auth.oauth_client.spi.OAuthTokens;
+import org.apache.sling.auth.oauth_client.spi.TokenState;
 
 /**
  * In-memory, volatile token store implementation

@@ -35,6 +35,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.InMemoryOAuthTokenStore;
 import org.apache.sling.auth.oauth_client.spi.OAuthStateManager;
+import org.apache.sling.auth.oauth_client.spi.OAuthTokens;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.apache.sling.testing.mock.sling.junit5.SlingContextExtension;
 import org.junit.jupiter.api.AfterEach;

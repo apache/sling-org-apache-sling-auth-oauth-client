@@ -48,6 +48,7 @@ import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OAuthState;
 import org.apache.sling.auth.oauth_client.spi.OAuthStateManager;
+import org.apache.sling.auth.oauth_client.spi.OAuthTokenStore;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.jcr.api.SlingRepository;

@@ -14,26 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client.impl;
+package org.apache.sling.auth.oauth_client.spi;
 
-public class OAuthException extends RuntimeException {
+import org.jetbrains.annotations.Nullable;
 
-    private static final long serialVersionUID = 1L;
-
-    public OAuthException() {
-        super();
-    }
-
-    public OAuthException(String message, Throwable cause) {
-        super(message, cause);
-    }
-
-    public OAuthException(String message) {
-        super(message);
-    }
-
-    public OAuthException(Throwable cause) {
-        super(cause);
-    }
+public record OAuthTokens(@Nullable String accessToken, long expiresAt, @Nullable String refreshToken) {
 
 }
