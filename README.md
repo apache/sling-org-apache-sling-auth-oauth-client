@@ -312,7 +312,7 @@ Now you can
 Note that this imports the test setup with a single user with a _redirect_uri_ set to _http://localhost*_, which can be a security issue.
 
 ```
-$ docker run --rm  --volume $(pwd)/src/test/resources/keycloak-import:/opt/keycloak/data/import --volume $(pwd)/keycloak-data:/opt/keycloak/data -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0.3 start-dev --import-realm
+$ docker run --rm  --volume $(pwd)/src/test/resources/keycloak-import:/opt/keycloak/data/import -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0.3 start-dev --import-realm
 ```
 
 #### Manual setup
@@ -358,7 +358,7 @@ $ docker run --rm --volume $(pwd)/keycloak-data:/opt/keycloak/data -p 8081:8080 
 
 Create a directory to store the exported realm
 ```
-mkdir -p $(pwd)/keycloak-data/export
+mkdir $(pwd)/keycloak-data/export
 ```
 Export the realm:
 ```

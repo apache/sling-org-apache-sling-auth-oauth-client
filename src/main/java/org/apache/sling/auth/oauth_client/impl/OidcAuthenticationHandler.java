@@ -35,8 +35,6 @@ import com.nimbusds.oauth2.sdk.http.HTTPResponse;
 import com.nimbusds.oauth2.sdk.id.ClientID;
 import com.nimbusds.oauth2.sdk.id.Identifier;
 import com.nimbusds.oauth2.sdk.id.State;
-import com.nimbusds.oauth2.sdk.pkce.CodeChallengeMethod;
-import com.nimbusds.oauth2.sdk.pkce.CodeVerifier;
 import com.nimbusds.openid.connect.sdk.OIDCTokenResponseParser;
 import com.nimbusds.openid.connect.sdk.UserInfoRequest;
 import com.nimbusds.openid.connect.sdk.UserInfoResponse;
@@ -75,7 +73,6 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -119,7 +116,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     // At the same time, some OAuth user authentication flows take a long time due to
     // consent, account selection, 2FA, etc so we cannot make this too short.
     protected static final int COOKIE_MAX_AGE_SECONDS = 300;
-    private boolean pkceEnabled;
 
     @ObjectClassDefinition(
             name = "Apache Sling Oidc Authentication Handler",
@@ -148,9 +144,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 description = "Default Connection Name")
         String defaultConnectionName() default "";
 
-        @AttributeDefinition(name = "PKCE Enabled",
-                description = "PKCE Enabled")
-        boolean pkceEnabled() default false;
     }
 
     @Activate
@@ -173,7 +166,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.loginCookieManager = loginCookieManager;
         this.defaultConnectionName = config.defaultConnectionName();
         this.userInfoProcessor = userInfoProcessor;
-        this.pkceEnabled = config.pkceEnabled();
 
         logger.debug("activate: registering ExternalIdentityProvider");
         bundleContext.registerService(
@@ -197,7 +189,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             return authInfo;
         }
 
-        //The request is not authenticated. Check the Authorization Code
+        //The request is not authenticate. Check the Authorization Code
         StringBuffer requestURL = request.getRequestURL();
         if ( request.getQueryString() != null )
             requestURL.append('?').append(request.getQueryString());
@@ -205,7 +197,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         AuthorizationResponse authResponse;
         Optional<OAuthState> clientState;
         Cookie stateCookie = null;
-        Cookie codeVerifierCookie = null;
         try {
             authResponse = AuthorizationResponse.parse(new URI(requestURL.toString()));
 
@@ -216,24 +207,16 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 return null;
             }
 
-            // Retrieve the state value from the cookie
             Cookie[] cookies = request.getCookies();
             // iterate over the cookie and get the one with name OAuthStateManager.COOKIE_NAME_REQUEST_KEY
             for (Cookie cookie : cookies) {
                 if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
                     stateCookie = cookie;
-                }
-                if (pkceEnabled && OAuthStateManager.COOKIE_NAME_CODE_VERIFIER.equals(cookie.getName())) {
-                    codeVerifierCookie = cookie;
+                    break;
                 }
             }
             if ( stateCookie == null ) {
                 logger.debug("Failed state check: No request cookie named '{}' found", OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                return AuthenticationInfo.FAIL_AUTH;
-            }
-            if ( pkceEnabled && codeVerifierCookie == null ) {
-                logger.debug("Failed state check: No request cookie named '{}' found", OAuthStateManager.COOKIE_NAME_CODE_VERIFIER);
                 response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 return AuthenticationInfo.FAIL_AUTH;
             }
@@ -243,7 +226,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             return null;
         }
 
-        // Validate the state cookie
         try {
             String stateFromAuthServer = clientState.get().perRequestKey();
             String stateFromClient = stateCookie.getValue();
@@ -272,26 +254,19 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             ResolvedOAuthConnection conn = ResolvedOAuthConnection.resolve(connection);
 
             ClientID clientId = new ClientID(conn.clientId());
+            Secret clientSecret = new Secret(conn.clientSecret());
+            ClientSecretBasic clientCredentials = new ClientSecretBasic(clientId, clientSecret);
+
             AuthorizationCode code = new AuthorizationCode(authCode);
+
             URI tokenEndpoint = new URI(conn.tokenEndpoint());
 
-            TokenRequest tokenRequest;
-            if (pkceEnabled) {
-                // Make the token request, with PKCE
-                tokenRequest = new TokenRequest(
-                        tokenEndpoint,
-                        clientId,
-                        new AuthorizationCodeGrant(code, new URI(callbackUri), new CodeVerifier(codeVerifierCookie.getValue())));
-            } else {
-                Secret clientSecret = new Secret(conn.clientSecret());
-                ClientSecretBasic clientCredentials = new ClientSecretBasic(clientId, clientSecret);
+            TokenRequest tokenRequest = new TokenRequest.Builder(
+                    tokenEndpoint,
+                    clientCredentials,
+                    new AuthorizationCodeGrant(code, new URI(callbackUri))
+            ).build();
 
-                tokenRequest = new TokenRequest.Builder(
-                        tokenEndpoint,
-                        clientCredentials,
-                        new AuthorizationCodeGrant(code, new URI(callbackUri))
-                ).build();
-            }
             HTTPRequest httpRequest = tokenRequest.toHTTPRequest();
             // GitHub requires an explicitly set Accept header, otherwise the response is url encoded
             // https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#2-users-are-redirected-back-to-your-site-by-github
@@ -380,8 +355,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             }
 
             var redirect = getAuthenticationRequestUri(connection, request, URI.create(callbackUri));
-            // add all the cookies to the response
-            redirect.cookies().forEach(response::addCookie);
+            response.addCookie(redirect.cookie());
             response.sendRedirect(redirect.uri().toString());
             return true;
         } catch (Exception e) {
@@ -390,7 +364,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         }
     }
 
-    private RedirectTarget getAuthenticationRequestUri(ClientConnection connection, HttpServletRequest request, URI redirectUri) {
+    private OAuthEntryPointServlet.RedirectTarget getAuthenticationRequestUri(ClientConnection connection, HttpServletRequest request, URI redirectUri) {
 
         ResolvedOAuthConnection conn = ResolvedOAuthConnection.resolve(connection);
 
@@ -402,48 +376,24 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         String redirect = request.getParameter(OAuthStateManager.PARAMETER_NAME_REDIRECT);
         String perRequestKey = new Identifier().getValue();
 
-        ArrayList<Cookie> cookies = new ArrayList<>();
         Cookie cookie = new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, perRequestKey);
         cookie.setHttpOnly(true);
         cookie.setSecure(true);
         cookie.setMaxAge(COOKIE_MAX_AGE_SECONDS);
-        cookies.add(cookie);
 
         State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connectionName, redirect));
 
         URI authorizationEndpointUri = URI.create(conn.authorizationEndpoint());
 
-        AuthorizationRequest.Builder authRequestBuilder;
-        if (pkceEnabled) {
-            // Generate a new random 256 bit code verifier for PKCE
-            CodeVerifier codeVerifier = new CodeVerifier();
+        // Compose the OpenID authentication request (for the code flow)
+        AuthorizationRequest.Builder authRequestBuilder = new AuthorizationRequest.Builder(
+                ResponseType.CODE,
+                clientID)
+                .scope(new Scope(conn.scopes().toArray(new String[0])))
+                .endpointURI(authorizationEndpointUri)
+                .redirectionURI(redirectUri)
+                .state(state);
 
-            authRequestBuilder = new AuthorizationRequest.Builder(
-                    new ResponseType("code"),
-                    clientID)
-                    .endpointURI(authorizationEndpointUri)
-                    .redirectionURI(redirectUri)
-                    .scope(new Scope(conn.scopes().toArray(new String[0])))
-                    .state(state)
-                    .codeChallenge(codeVerifier, CodeChallengeMethod.S256);
-
-            Cookie codeVerifierCookie = new Cookie(OAuthStateManager.COOKIE_NAME_CODE_VERIFIER, codeVerifier.getValue());
-            codeVerifierCookie.setHttpOnly(true);
-            codeVerifierCookie.setSecure(true);
-            codeVerifierCookie.setMaxAge(COOKIE_MAX_AGE_SECONDS);
-
-            cookies.add(codeVerifierCookie);
-
-        } else {
-            // Compose the OpenID authentication request (for the code flow)
-            authRequestBuilder = new AuthorizationRequest.Builder(
-                    ResponseType.CODE,
-                    clientID)
-                    .scope(new Scope(conn.scopes().toArray(new String[0])))
-                    .endpointURI(authorizationEndpointUri)
-                    .redirectionURI(redirectUri)
-                    .state(state);
-        }
         if ( conn.additionalAuthorizationParameters() != null ) {
             conn.additionalAuthorizationParameters().stream()
                     .map( s -> s.split("=") )
@@ -451,10 +401,10 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                     .forEach( p -> authRequestBuilder.customParameter(p[0], p[1]));
         }
 
-        return new RedirectTarget(authRequestBuilder.build().toURI(), cookies);
+        return new OAuthEntryPointServlet.RedirectTarget(authRequestBuilder.build().toURI(), cookie);
     }
 
-    record RedirectTarget(URI uri, List<Cookie> cookies) {}
+    record RedirectTarget(URI uri, Cookie cookie) {}
 
     @Override
     public void dropCredentials(HttpServletRequest request, HttpServletResponse response) {
