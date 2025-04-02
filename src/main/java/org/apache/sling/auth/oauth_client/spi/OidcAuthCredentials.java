@@ -56,21 +56,18 @@ public class OidcAuthCredentials implements Credentials {
         this.idp = idp;
     }
 
-    @NotNull
-    public String getUserId() {
+    @NotNull public String getUserId() {
         return userId.getId();
     }
 
-    @NotNull
-    public String getIdp() {
+    @NotNull public String getIdp() {
         return idp;
     }
 
-    @NotNull
-    public Map<String,Object> getAttributes() {
+    @NotNull public Map<String,Object> getAttributes() {
         return Collections.unmodifiableMap(attributes);
     }
-    
+
     public void setAttribute(@NotNull String key, @NotNull String value) {
         synchronized (attributes) {
             attributes.put(key, value);
@@ -86,9 +83,7 @@ public class OidcAuthCredentials implements Credentials {
         this.groups.add(group);
     }
 
-    @NotNull
-    public Iterable<String> getGroups() {
+    @NotNull public Iterable<String> getGroups() {
         return groups;
     }
-
  }

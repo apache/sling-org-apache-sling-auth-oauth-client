@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client.spi;
+package org.apache.sling.auth.oauth_client.impl;
 
 import java.util.Optional;
 
@@ -41,7 +41,7 @@ public class CryptoOAuthStateManager implements OAuthStateManager {
     private final CryptoService cryptoService;
 
     @Activate
-    public CryptoOAuthStateManager(@Reference(target = "(names=sling-oauth)") CryptoService cryptoService) {
+    public CryptoOAuthStateManager(@Reference CryptoService cryptoService) {
         this.cryptoService = cryptoService;
     }
     

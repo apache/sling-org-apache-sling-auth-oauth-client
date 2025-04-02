@@ -14,8 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client.spi;
+package org.apache.sling.auth.oauth_client.impl;
 
-public enum TokenState {
-    VALID, EXPIRED, MISSING;
+import java.util.Optional;
+
+import com.nimbusds.oauth2.sdk.id.State;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+public interface OAuthStateManager {
+    
+    String PARAMETER_NAME_REDIRECT = "redirect";
+    String COOKIE_NAME_REQUEST_KEY = "sling.oauth-request-key";
+    
+    @NotNull State toNimbusState(@NotNull OAuthState state);
+    
+    @NotNull Optional<OAuthState> toOAuthState(@Nullable State state);
+
 }

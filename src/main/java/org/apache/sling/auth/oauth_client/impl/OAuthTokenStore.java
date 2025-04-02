@@ -14,10 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client.spi;
+package org.apache.sling.auth.oauth_client.impl;
 
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.apache.sling.auth.oauth_client.impl.OAuthException;
+import org.apache.sling.auth.oauth_client.impl.OAuthToken;
+import org.apache.sling.auth.oauth_client.impl.OAuthTokens;
 import org.jetbrains.annotations.NotNull;
 
 //

@@ -14,9 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.sling.auth.oauth_client.spi;
+package org.apache.sling.auth.oauth_client.impl;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
-public record OAuthState(@NotNull String perRequestKey, @NotNull String connectionName, @Nullable String redirect) {}
+public enum TokenState {
+    VALID, EXPIRED, MISSING;
+}

@@ -20,8 +20,6 @@ package org.apache.sling.auth.oauth_client.impl;
 import com.nimbusds.oauth2.sdk.TokenResponse;
 import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 import net.minidev.json.JSONArray;
-import org.apache.sling.auth.oauth_client.spi.Converter;
-import org.apache.sling.auth.oauth_client.spi.OAuthTokens;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.osgi.service.component.annotations.Component;

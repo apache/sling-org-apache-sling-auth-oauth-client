@@ -16,7 +16,6 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
-import org.apache.sling.auth.oauth_client.spi.CryptoOAuthStateManager;
 import org.apache.sling.commons.crypto.CryptoService;
 import org.jetbrains.annotations.NotNull;
 

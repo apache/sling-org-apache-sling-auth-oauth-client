@@ -19,8 +19,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.stream.Stream;
 
-import org.apache.sling.auth.oauth_client.spi.CryptoOAuthStateManager;
-import org.apache.sling.auth.oauth_client.spi.OAuthState;
 import org.junit.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;

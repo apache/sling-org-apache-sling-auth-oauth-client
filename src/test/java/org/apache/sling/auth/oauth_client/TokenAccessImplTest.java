@@ -21,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.apache.sling.auth.oauth_client.impl.MockOidcConnection;
 import org.apache.sling.auth.oauth_client.impl.OAuthTokenRefresher;
-import org.apache.sling.auth.oauth_client.spi.OAuthTokenStore;
-import org.apache.sling.auth.oauth_client.spi.OAuthTokens;
+import org.apache.sling.auth.oauth_client.impl.OAuthTokenStore;
+import org.apache.sling.auth.oauth_client.impl.OAuthTokens;
 import org.apache.sling.auth.oauth_client.impl.TokenAccessImpl;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.apache.sling.testing.mock.sling.junit5.SlingContextExtension;
