@@ -1,7 +1,7 @@
 {
   "bundles": [
     {
-        "id":"com.nimbusds:oauth2-oidc-sdk:11.19.1",
+        "id":"com.nimbusds:oauth2-oidc-sdk:11.23.1",
         "start-order": 24
     },
     {
@@ -15,6 +15,9 @@
     {
        "id":"com.nimbusds:lang-tag:1.7",
         "start-order": 24
+    },
+    {
+      "id": "com.nimbusds:nimbus-jose-jwt:10.0.2"
     },
     {
         "id":"org.apache.servicemix.bundles:org.apache.servicemix.bundles.jcip-annotations:1.0_2",
