@@ -96,8 +96,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     String idp;
 
-    private final OAuthTokenStore tokenStore;
-
     private  final String callbackUri;
 
     private LoginCookieManager loginCookieManager;
@@ -147,7 +145,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     public OidcAuthenticationHandler(@Reference(policyOption = ReferencePolicyOption.GREEDY) @NotNull SlingRepository repository,
                                      @NotNull BundleContext bundleContext, @Reference List<ClientConnection> connections,
                                      @Reference OAuthStateManager stateManager,
-                                     @Reference OAuthTokenStore tokenStore, Config config,
+                                     Config config,
                                      @Reference(cardinality = ReferenceCardinality.OPTIONAL, policyOption = ReferencePolicyOption.GREEDY) LoginCookieManager loginCookieManager,
                                      @Reference(policyOption = ReferencePolicyOption.GREEDY) UserInfoProcessor userInfoProcessor
     ) {
@@ -156,7 +154,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.connections = connections.stream()
                 .collect(Collectors.toMap( ClientConnection::name, Function.identity()));
         this.stateManager = stateManager;
-        this.tokenStore = tokenStore;
         this.idp = config.idp();
         this.callbackUri = config.callbackUri();
         this.defaultRedirect = config.defaultRedirect();
@@ -205,6 +202,11 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             }
 
             Cookie[] cookies = request.getCookies();
+            if ( cookies == null ) {
+                logger.debug("Failed state check: No cookies found");
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                return AuthenticationInfo.FAIL_AUTH;
+            }
             // iterate over the cookie and get the one with name OAuthStateManager.COOKIE_NAME_REQUEST_KEY
             for (Cookie cookie : cookies) {
                 if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
@@ -277,6 +279,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 logger.debug("Token error. Received code: {}, message: {}", tokenResponse.toErrorResponse().getErrorObject().getCode(), tokenResponse.toErrorResponse().getErrorObject().getDescription());
                 throw new OAuthCallbackException("Token exchange error", new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse())));
             }
+            tokenResponse = tokenResponse.toSuccessResponse();
             // Make the request to userInfo
             // TODO: fix the cast and manage OAuthConnections as well?
             HTTPResponse httpResponseUserInfo = new UserInfoRequest(new URI(((OidcConnectionImpl)connection).userInfoUrl()), tokenResponse.toSuccessResponse().getTokens().getAccessToken())
