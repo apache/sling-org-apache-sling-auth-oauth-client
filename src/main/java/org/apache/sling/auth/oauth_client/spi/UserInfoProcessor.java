@@ -25,6 +25,4 @@ import com.nimbusds.openid.connect.sdk.claims.UserInfo;
  */
 public interface UserInfoProcessor {
     OidcAuthCredentials process(UserInfo userInfo, TokenResponse tokenResponse, String idp);
-
-    String getSubject(UserInfo userInfo);
 }

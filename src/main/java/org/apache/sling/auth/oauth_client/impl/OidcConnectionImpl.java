@@ -26,6 +26,8 @@ import org.osgi.service.metatype.annotations.AttributeType;
 import org.osgi.service.metatype.annotations.Designate;
 import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 
+import java.net.URI;
+
 // TODO - bad name
 @Component
 @Designate(ocd = OidcConnectionImpl.Config.class, factory = true)
@@ -77,6 +79,10 @@ public class OidcConnectionImpl implements ClientConnection {
     public String tokenEndpoint() {
         return metadataRegistry.getTokenEndpoint(cfg.baseUrl()).toString();
     }
+
+    public URI jwkSetURL() {
+        return metadataRegistry.getJWKSetURI(cfg.baseUrl());
+    }
     
     public String clientId() {
         return cfg.clientId();
@@ -96,5 +102,9 @@ public class OidcConnectionImpl implements ClientConnection {
 
     public String[] additionalAuthorizationParameters() {
         return cfg.additionalAuthorizationParameters();
+    }
+
+    public String issuer() {
+        return metadataRegistry.getIssuer(cfg.baseUrl());
     }
 }

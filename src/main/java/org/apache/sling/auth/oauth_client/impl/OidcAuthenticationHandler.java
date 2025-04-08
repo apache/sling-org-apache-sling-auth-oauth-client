@@ -16,6 +16,9 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.proc.BadJOSEException;
 import com.nimbusds.oauth2.sdk.AuthorizationCode;
 import com.nimbusds.oauth2.sdk.AuthorizationCodeGrant;
 import com.nimbusds.oauth2.sdk.AuthorizationErrorResponse;
@@ -34,11 +37,14 @@ import com.nimbusds.oauth2.sdk.http.HTTPRequest;
 import com.nimbusds.oauth2.sdk.http.HTTPResponse;
 import com.nimbusds.oauth2.sdk.id.ClientID;
 import com.nimbusds.oauth2.sdk.id.Identifier;
+import com.nimbusds.oauth2.sdk.id.Issuer;
 import com.nimbusds.oauth2.sdk.id.State;
 import com.nimbusds.openid.connect.sdk.OIDCTokenResponseParser;
 import com.nimbusds.openid.connect.sdk.UserInfoRequest;
 import com.nimbusds.openid.connect.sdk.UserInfoResponse;
+import com.nimbusds.openid.connect.sdk.claims.IDTokenClaimsSet;
 import com.nimbusds.openid.connect.sdk.claims.UserInfo;
+import com.nimbusds.openid.connect.sdk.validators.IDTokenValidator;
 import org.apache.jackrabbit.oak.spi.security.authentication.credentials.CredentialsSupport;
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentityProvider;
 import org.apache.sling.auth.core.spi.AuthenticationHandler;
@@ -68,8 +74,10 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -105,7 +113,10 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private String defaultConnectionName;
 
     private UserInfoProcessor userInfoProcessor;
+
     private static final long serialVersionUID = 1L;
+
+    private boolean userInfoEnabled;
 
     // We don't want leave the cookie lying around for a long time because it it not needed.
     // At the same time, some OAuth user authentication flows take a long time due to
@@ -139,6 +150,10 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 description = "Default Connection Name")
         String defaultConnectionName() default "";
 
+        @AttributeDefinition(name = "UserInfo Enabled",
+                description = "UserInfo Enabled")
+        String userInfoEnabled() default "true";
+
     }
 
     @Activate
@@ -160,6 +175,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.loginCookieManager = loginCookieManager;
         this.defaultConnectionName = config.defaultConnectionName();
         this.userInfoProcessor = userInfoProcessor;
+        this.userInfoEnabled = Boolean.parseBoolean(config.userInfoEnabled());
 
         logger.debug("activate: registering ExternalIdentityProvider");
         bundleContext.registerService(
@@ -189,23 +205,26 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             requestURL.append('?').append(request.getQueryString());
 
         AuthorizationResponse authResponse;
-        Optional<OAuthState> clientState;
+        Optional<OAuthState> clientState; //state returned by the idp in the redirect request
+        String authCode; //authorization code returned by the idp in the redirect request
         Cookie stateCookie = null;
         try {
             authResponse = AuthorizationResponse.parse(new URI(requestURL.toString()));
 
             clientState = stateManager.toOAuthState(authResponse.getState());
             if ( !clientState.isPresent() )  {
-                logger.debug("No state found in authorization response");
-                // Return null to indicate that the handler cannot extract credentials
-                return null;
+                // Do not return null to indicate that the handler cannot extract credentials
+                throw new IllegalStateException("No state found in authorization response");
             }
+
+            if (authResponse.toSuccessResponse().getAuthorizationCode() == null) {
+                throw new IllegalStateException("No authorization code found in authorization response");
+            }
+            authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
 
             Cookie[] cookies = request.getCookies();
             if ( cookies == null ) {
-                logger.debug("Failed state check: No cookies found");
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                return AuthenticationInfo.FAIL_AUTH;
+                throw new IllegalStateException("Failed state check: No cookies found");
             }
             // iterate over the cookie and get the one with name OAuthStateManager.COOKIE_NAME_REQUEST_KEY
             for (Cookie cookie : cookies) {
@@ -215,9 +234,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 }
             }
             if ( stateCookie == null ) {
-                logger.debug("Failed state check: No request cookie named '{}' found", OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                return AuthenticationInfo.FAIL_AUTH;
+                throw new IllegalStateException(String.format("Failed state check: No request cookie named %s found", OAuthStateManager.COOKIE_NAME_REQUEST_KEY));
             }
 
         } catch (ParseException | URISyntaxException e) {
@@ -225,42 +242,43 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             return null;
         }
 
+        String stateFromAuthServer = clientState.get().perRequestKey();
+        String stateFromClient = stateCookie.getValue();
+        if ( ! stateFromAuthServer.equals(stateFromClient) )
+            throw new IllegalStateException("Failed state check: request keys from client and server are not the same");
+
+        if ( !authResponse.indicatesSuccess() ) {
+            AuthorizationErrorResponse errorResponse = authResponse.toErrorResponse();
+            throw new IllegalStateException("Authentication failed", new RuntimeException(toErrorMessage("Error in authentication response", errorResponse)));
+        }
+
+        Optional<String> redirect = Optional.ofNullable(clientState.get().redirect());
+        // TODO: find a better way to pass it?
+        request.setAttribute(REDIRECT_ATTRIBUTE_NAME,redirect);
+
+        String desiredConnectionName = clientState.get().connectionName();
+        if ( desiredConnectionName == null || desiredConnectionName.isEmpty() )
+            throw new IllegalArgumentException("No connection found in clientState");
+
+        ClientConnection connection = connections.get(desiredConnectionName);
+        if ( connection == null )
+            throw new IllegalArgumentException(String.format("Requested unknown connection '%s'", desiredConnectionName));
+
+        ResolvedOidcConnection conn = ResolvedOidcConnection.resolve(connection);
+
+        ClientID clientId = new ClientID(conn.clientId());
+        Secret clientSecret = new Secret(conn.clientSecret());
+        ClientSecretBasic clientCredentials = new ClientSecretBasic(clientId, clientSecret);
+
+        // Exchange the authorization code for an access token, id token and possibly refresh token
+        AuthorizationCode code = new AuthorizationCode(authCode);
+
+        URI tokenEndpoint;
+        TokenRequest tokenRequest;
+        HTTPResponse httpResponse;
         try {
-            String stateFromAuthServer = clientState.get().perRequestKey();
-            String stateFromClient = stateCookie.getValue();
-            if ( ! stateFromAuthServer.equals(stateFromClient) )
-                throw new IllegalStateException("Failed state check: request keys from client and server are not the same");
-
-            if ( !authResponse.indicatesSuccess() ) {
-                AuthorizationErrorResponse errorResponse = authResponse.toErrorResponse();
-                throw new OAuthCallbackException("Authentication failed", new RuntimeException(toErrorMessage("Error in authentication response", errorResponse)));
-            }
-
-            Optional<String> redirect = Optional.ofNullable(clientState.get().redirect());
-            // TODO: find a better way to pass it?
-            request.setAttribute(REDIRECT_ATTRIBUTE_NAME,redirect);
-
-            String authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
-
-            String desiredConnectionName = clientState.get().connectionName();
-            if ( desiredConnectionName == null || desiredConnectionName.isEmpty() )
-                throw new IllegalArgumentException("No connection found in clientState");
-
-            ClientConnection connection = connections.get(desiredConnectionName);
-            if ( connection == null )
-                throw new IllegalArgumentException(String.format("Requested unknown connection '%s'", desiredConnectionName));
-
-            ResolvedOAuthConnection conn = ResolvedOAuthConnection.resolve(connection);
-
-            ClientID clientId = new ClientID(conn.clientId());
-            Secret clientSecret = new Secret(conn.clientSecret());
-            ClientSecretBasic clientCredentials = new ClientSecretBasic(clientId, clientSecret);
-
-            AuthorizationCode code = new AuthorizationCode(authCode);
-
-            URI tokenEndpoint = new URI(conn.tokenEndpoint());
-
-            TokenRequest tokenRequest = new TokenRequest.Builder(
+            tokenEndpoint = new URI(conn.tokenEndpoint());
+            tokenRequest = new TokenRequest.Builder(
                     tokenEndpoint,
                     clientCredentials,
                     new AuthorizationCodeGrant(code, new URI(callbackUri))
@@ -271,50 +289,108 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             // https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#2-users-are-redirected-back-to-your-site-by-github
             // see also https://bitbucket.org/connect2id/oauth-2.0-sdk-with-openid-connect-extensions/issues/107/support-application-x-www-form-urlencoded
             httpRequest.setAccept("application/json");
-            HTTPResponse httpResponse = httpRequest.send();
+            httpResponse = httpRequest.send();
+        } catch (URISyntaxException e) {
+            logger.error("Token Endpoint is not a valid URI: {} Error: {}", conn.tokenEndpoint(), e.getMessage());
+            throw new RuntimeException(String.format("Token Endpoint is not a valid URI: %s", conn.tokenEndpoint()));
+        } catch (IOException e) {
+            logger.error("Failed to exchange authorization code for access token: {}", e.getMessage(), e);
+            throw new RuntimeException(e);
+        }
 
-            // extract oid token from the response
-            TokenResponse tokenResponse = OIDCTokenResponseParser.parse(httpResponse);
+
+        // extract id token from the response
+        TokenResponse tokenResponse;
+        IDTokenClaimsSet claims;
+        try {
+            tokenResponse = OIDCTokenResponseParser.parse(httpResponse);
+
             if ( !tokenResponse.indicatesSuccess() ) {
                 logger.debug("Token error. Received code: {}, message: {}", tokenResponse.toErrorResponse().getErrorObject().getCode(), tokenResponse.toErrorResponse().getErrorObject().getDescription());
-                throw new OAuthCallbackException("Token exchange error", new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse())));
+                throw new IllegalStateException("Token exchange error", new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse())));
             }
             tokenResponse = tokenResponse.toSuccessResponse();
-            // Make the request to userInfo
-            // TODO: fix the cast and manage OAuthConnections as well?
-            HTTPResponse httpResponseUserInfo = new UserInfoRequest(new URI(((OidcConnectionImpl)connection).userInfoUrl()), tokenResponse.toSuccessResponse().getTokens().getAccessToken())
-                    .toHTTPRequest()
-                    .send();
 
-            UserInfoResponse userInfoResponse = UserInfoResponse.parse(httpResponseUserInfo);
-            if (! userInfoResponse.indicatesSuccess()) {
-                // The request failed, e.g. due to invalid or expired token
-                logger.debug("UserInfo error. Received code: {}, message: {}",userInfoResponse.toErrorResponse().getErrorObject().getCode(), userInfoResponse.toErrorResponse().getErrorObject().getDescription());
-                throw new OAuthCallbackException("Token exchange error", new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse())));
-
-            }
-
-            // Extract the claims
-            UserInfo userInfo = userInfoResponse.toSuccessResponse().getUserInfo();
-
-            //process credentials
-            OidcAuthCredentials credentials = userInfoProcessor.process(userInfo, tokenResponse, idp);
-
-            //create authInfo
-            authInfo = new AuthenticationInfo(AUTH_TYPE, userInfoProcessor.getSubject(userInfo));
-            authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
-
-            logger.info("User {} authenticated", userInfo.getSubject());
-            return authInfo;
-
-
-        } catch (IllegalStateException | IllegalArgumentException | OAuthCallbackException e) {
-            logger.error("State check failed", e);
-            return AuthenticationInfo.FAIL_AUTH;
-        } catch (Exception e) {
-            logger.error("Unknown error", e);
-            return AuthenticationInfo.FAIL_AUTH;
+            claims = validateIdToken(tokenResponse, conn);
+        } catch (ParseException e) {
+            logger.error("Failed to parse token response: {}", e.getMessage(), e);
+            throw new RuntimeException(e.getMessage());
+        } catch (BadJOSEException | JOSEException e) {
+            logger.error("Failed to validate token: {}", e.getMessage(), e);
+            throw new RuntimeException(e.getMessage());
         }
+        // Make the request to userInfo
+        OidcAuthCredentials credentials;
+        if (userInfoEnabled) {
+            HTTPResponse httpResponseUserInfo;
+            UserInfoResponse userInfoResponse;
+            try {
+                httpResponseUserInfo = new UserInfoRequest(new URI(((OidcConnectionImpl) connection).userInfoUrl()), tokenResponse.toSuccessResponse().getTokens().getAccessToken())
+                        .toHTTPRequest()
+                        .send();
+                userInfoResponse = UserInfoResponse.parse(httpResponseUserInfo);
+                if (!userInfoResponse.indicatesSuccess()) {
+                    // The request failed, e.g. due to invalid or expired token
+                    logger.debug("UserInfo error. Received code: {}, message: {}", userInfoResponse.toErrorResponse().getErrorObject().getCode(), userInfoResponse.toErrorResponse().getErrorObject().getDescription());
+                    throw new IllegalStateException("Token exchange error", new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse())));
+
+                }
+
+                // Extract the claims
+                UserInfo userInfo = userInfoResponse.toSuccessResponse().getUserInfo();
+
+                //process credentials
+                credentials = userInfoProcessor.process(userInfo, tokenResponse, idp);
+
+            } catch (IOException | URISyntaxException | ParseException e) {
+                logger.error("Error while processing UserInfo: {}", e.getMessage(), e);
+                throw new IllegalStateException(e);
+            }
+        } else {
+            credentials = userInfoProcessor.process(null, tokenResponse, idp);
+        }
+        //create authInfo
+        String subject = claims.getSubject().getValue();
+        authInfo = new AuthenticationInfo(AUTH_TYPE, subject);
+        authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
+
+        logger.info("User {} authenticated", subject);
+        return authInfo;
+
+
+    }
+
+    /**
+     * Validates the ID token received from the OpenID provider.
+     * According to this cocumentation: https://connect2id.com/blog/how-to-validate-an-openid-connect-id-token
+     * it perform following validations:
+     * <ul>
+     *  <li> Checks if the ID token JWS algorithm matches the expected one.</li>
+     *  <li> Checks the ID token signature (or HMAC) using the provided key material (from the JWK set URL or the client secret).</li>
+     *  <li> Checks if the ID token issuer (iss) and audience (aud) match the expected IdP and client_id.</li>
+     *  <li> Checks if the ID token is within the specified validity window (between the given issue time and expiration time, given a 1 minute leeway to accommodate clock skew).</li>
+     *  <li> Check the nonce value if one is expected.</li>
+     * </ul>
+     *
+     * @param tokenResponse The token response containing the ID token.
+     * @param conn         The resolved OIDC connection.
+     * @return The validated ID token claims set.
+     * @throws BadJOSEException If the ID token is invalid.
+     * @throws JOSEException     If there is an error during validation.
+     */
+    private IDTokenClaimsSet validateIdToken(TokenResponse tokenResponse, ResolvedOidcConnection conn) throws BadJOSEException, JOSEException {
+        Issuer issuer = new Issuer(conn.issuer());
+        ClientID clientID = new ClientID(conn.clientId());
+        JWSAlgorithm jwsAlg = JWSAlgorithm.RS256; //TODO: Read from config
+        URL jwkSetURL = null;
+        try {
+            jwkSetURL = conn.jwkSetURL().toURL();
+        } catch (MalformedURLException e) {
+            throw new IllegalArgumentException(e);
+        }
+
+        IDTokenValidator validator = new IDTokenValidator(issuer, clientID, jwsAlg, jwkSetURL);
+        return validator.validate(tokenResponse.toSuccessResponse().getTokens().toOIDCTokens().getIDToken(), null);
 
     }
 
@@ -339,18 +415,16 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     @Override
     public boolean requestCredentials(HttpServletRequest request, HttpServletResponse response) {
         logger.debug("inside requestCredentials");
+        String desiredConnectionName = request.getParameter("c");
+        if ( desiredConnectionName == null ) {
+            logger.debug("Missing mandatory request parameter 'c' using default connection '{}'", defaultConnectionName);
+            desiredConnectionName = defaultConnectionName;
+        }
         try {
-            String desiredConnectionName = request.getParameter("c");
-            if ( desiredConnectionName == null ) {
-                logger.debug("Missing mandatory request parameter 'c' using default connection '{}'", defaultConnectionName);
-                desiredConnectionName = defaultConnectionName;
-            }
-
             ClientConnection connection = connections.get(desiredConnectionName);
             if ( connection == null ) {
-                if ( logger.isDebugEnabled() )
-                    logger.debug("Client requested unknown connection '{}'; known: '{}'", desiredConnectionName, connections.keySet());
-                response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+                logger.debug("Client requested unknown connection '{}'; known: '{}'", desiredConnectionName, connections.keySet());
+                response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Client requested unknown connection");
                 return false;
             }
 
@@ -358,15 +432,15 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             response.addCookie(redirect.cookie());
             response.sendRedirect(redirect.uri().toString());
             return true;
-        } catch (Exception e) {
-            logger.error("Internal error", e);
+        } catch (IOException e) {
+            logger.error("Unexpected error while sending redirect.", e);
             return false;
         }
     }
 
     private OAuthEntryPointServlet.RedirectTarget getAuthenticationRequestUri(ClientConnection connection, HttpServletRequest request, URI redirectUri) {
 
-        ResolvedOAuthConnection conn = ResolvedOAuthConnection.resolve(connection);
+        ResolvedOidcConnection conn = ResolvedOidcConnection.resolve(connection);
 
         // The client ID provisioned by the OpenID provider when
         // the client was registered
@@ -421,7 +495,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         if(loginCookieManager.getLoginCookie(request) !=null) {
             // A valid login cookie has been sent
-            // According with AuthenticationFeedbackHandler javadoc we send false to confirm that the request is authenticated
+            // According to AuthenticationFeedbackHandler javadoc we send false to confirm that the request is authenticated
             return false;
         }
 

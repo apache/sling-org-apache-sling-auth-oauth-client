@@ -50,30 +50,25 @@ public class UserInfoProcessorImpl implements UserInfoProcessor {
         OidcAuthCredentials credentials = new OidcAuthCredentials(userInfo.getPreferredUsername(), idp);
         credentials.setAttribute(".token", "");
 
-        Object groups = userInfo.toJSONObject().remove("groups");
-        if (groups != null && groups instanceof JSONArray) {
-            logger.debug("Groups: " + groups.toString());
-            //Convert the groups in a Set of Strings
-            ((JSONArray) groups).forEach(group -> credentials.addGroup(group.toString()));
+        if (userInfo != null) {
+            Object groups = userInfo.toJSONObject().remove("groups");
+            if (groups != null && groups instanceof JSONArray) {
+                logger.debug("Groups: " + groups.toString());
+                //Convert the groups in a Set of Strings
+                ((JSONArray) groups).forEach(group -> credentials.addGroup(group.toString()));
 
-        }
-
-        // Set all the attributes in userInfo to the credentials
-        userInfo.toJSONObject().forEach((key, value) -> {
-            if (value != null) {
-                credentials.setAttribute("profile/"+key, value.toString());
             }
-        });
 
+            // Set all the attributes in userInfo to the credentials
+            userInfo.toJSONObject().forEach((key, value) -> {
+                if (value != null) {
+                    credentials.setAttribute("profile/" + key, value.toString());
+                }
+            });
+        }
         //Store the Access Token on user node
         credentials.setAttribute(JcrUserHomeOAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, tokens.accessToken());
         return credentials;
     }
-
-    @Override
-    public String getSubject(UserInfo userInfo) {
-        return userInfo.getSubject().getValue();
-    }
-
 
 }

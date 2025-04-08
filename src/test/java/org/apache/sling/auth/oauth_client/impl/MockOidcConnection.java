@@ -18,7 +18,6 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import java.util.Map;
 
-import org.apache.sling.auth.oauth_client.impl.OidcConnectionImpl;
 import org.osgi.util.converter.Converters;
 
 public class MockOidcConnection extends OidcConnectionImpl {
@@ -29,7 +28,13 @@ public class MockOidcConnection extends OidcConnectionImpl {
         super(Converters.standardConverter().convert(Map.of("name", name, "baseUrl", baseUrl, "clientId", clientId, "clientSecret", clientSecret, "scopes", scopes, "additionalAuthorizationParameters", additionalAuthorizationParameters))
                 .to(Config.class), null);
     }
-    
+
+    public MockOidcConnection(String[] scopes, String name, String clientId, String clientSecret, String baseUrl,
+                              String[] additionalAuthorizationParameters, OidcProviderMetadataRegistry metadataRegistry) {
+        super(Converters.standardConverter().convert(Map.of("name", name, "baseUrl", baseUrl, "clientId", clientId, "clientSecret", clientSecret, "scopes", scopes, "additionalAuthorizationParameters", additionalAuthorizationParameters))
+                .to(Config.class), metadataRegistry);
+    }
+
     @Override
     public String authorizationEndpoint() {
         return baseUrl() + "/authorize";

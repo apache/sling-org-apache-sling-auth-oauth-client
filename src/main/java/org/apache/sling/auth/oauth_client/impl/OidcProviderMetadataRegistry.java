@@ -52,16 +52,24 @@ public class OidcProviderMetadataRegistry {
             }
         });
     }
-    
+
     public @Nullable URI getTokenEndpoint(@NotNull String base) {
         return getProviderMetadata(base).getTokenEndpointURI();
     }
-    
+
     public @Nullable URI getAuthorizationEndpoint(@NotNull String base) {
         return getProviderMetadata(base).getAuthorizationEndpointURI();
     }
 
     public @Nullable URI getUserInfoEndpoint(@NotNull String base) {
         return getProviderMetadata(base).getUserInfoEndpointURI();
+    }
+
+    public @Nullable URI getJWKSetURI(@NotNull String base) {
+        return getProviderMetadata(base).getJWKSetURI();
+    }
+
+    public @NotNull String getIssuer(@NotNull String base) {
+        return getProviderMetadata(base).getIssuer().getValue();
     }
 }
