@@ -48,15 +48,7 @@
 
 	<build>
 		<plugins>
-            <plugin>
-                <groupId>biz.aQute.bnd</groupId>
-                <artifactId>bnd-maven-plugin</artifactId>
-                <extensions>true</extensions>
-                <configuration>
-                    <bnd><![CDATA[-exportcontents:org.apache.sling.auth.oauth_client.spi]]></bnd>
-                </configuration>
-            </plugin>
-            <plugin>
+			<plugin>
 				<groupId>biz.aQute.bnd</groupId>
 				<artifactId>bnd-maven-plugin</artifactId>
 			</plugin>
@@ -229,16 +221,15 @@
                                 <repositoryUrl>file://${project.build.directory}/artifacts</repositoryUrl>
                             </repositoryUrls>
                             <launcherArguments>
-                                <vm-options>
+                                <!-- <vm-options>
                                     <value>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:3007</value>
-                                </vm-options>
+                                </vm-options> -->
                                 <frameworkProperties>
                                     <org.osgi.service.http.port>${http.port}</org.osgi.service.http.port>
                                 </frameworkProperties>
                             </launcherArguments>
                             <environmentVariables>
                                 <IT_ENCRYPTION_PASSWORD>random</IT_ENCRYPTION_PASSWORD>
-                                <JAVA_OPS>-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:3007</JAVA_OPS>
                             </environmentVariables>
                             <startTimeoutSeconds>${it.startTimeoutSeconds}</startTimeoutSeconds>
                         </launch>
