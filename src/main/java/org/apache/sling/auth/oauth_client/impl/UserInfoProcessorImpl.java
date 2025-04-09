@@ -38,7 +38,7 @@ public class UserInfoProcessorImpl implements UserInfoProcessor {
     Logger logger = LoggerFactory.getLogger(UserInfoProcessorImpl.class);
 
     @Override
-    public OidcAuthCredentials process(UserInfo userInfo, TokenResponse tokenResponse, String idp) {
+    public OidcAuthCredentials process(UserInfo userInfo, TokenResponse tokenResponse, String oidcSbject, String idp) {
         logger.debug("Prefered Username: " + userInfo.getPreferredUsername());
         logger.debug("Subject: " + userInfo.getSubject());
         logger.debug("Email: " + userInfo.getEmailAddress());
@@ -47,7 +47,7 @@ public class UserInfoProcessorImpl implements UserInfoProcessor {
         OAuthTokens tokens = Converter.toSlingOAuthTokens(tokenResponse.toSuccessResponse().getTokens());
 
         // Create AuthenticationInfo object
-        OidcAuthCredentials credentials = new OidcAuthCredentials(userInfo.getPreferredUsername(), idp);
+        OidcAuthCredentials credentials = new OidcAuthCredentials(oidcSbject, idp);
         credentials.setAttribute(".token", "");
 
         if (userInfo != null) {

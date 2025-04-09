@@ -24,5 +24,5 @@ import com.nimbusds.openid.connect.sdk.claims.UserInfo;
  * Process the user info received from the identity provider and return the credentials that will be returned by the authentication handler.
  */
 public interface UserInfoProcessor {
-    OidcAuthCredentials process(UserInfo userInfo, TokenResponse tokenResponse, String idp);
+    OidcAuthCredentials process(UserInfo userInfo, TokenResponse tokenResponse, String oidcSbject, String idp);
 }

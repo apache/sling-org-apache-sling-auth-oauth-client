@@ -320,6 +320,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             throw new RuntimeException(e.getMessage());
         }
         // Make the request to userInfo
+        String subject = claims.getSubject().getValue();
         OidcAuthCredentials credentials;
         if (userInfoEnabled) {
             HTTPResponse httpResponseUserInfo;
@@ -340,17 +341,16 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 UserInfo userInfo = userInfoResponse.toSuccessResponse().getUserInfo();
 
                 //process credentials
-                credentials = userInfoProcessor.process(userInfo, tokenResponse, idp);
+                credentials = userInfoProcessor.process(userInfo, tokenResponse, subject, idp);
 
             } catch (IOException | URISyntaxException | ParseException e) {
                 logger.error("Error while processing UserInfo: {}", e.getMessage(), e);
                 throw new IllegalStateException(e);
             }
         } else {
-            credentials = userInfoProcessor.process(null, tokenResponse, idp);
+            credentials = userInfoProcessor.process(null, tokenResponse, subject, idp);
         }
         //create authInfo
-        String subject = claims.getSubject().getValue();
         authInfo = new AuthenticationInfo(AUTH_TYPE, subject);
         authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
 
