@@ -40,6 +40,7 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.Random;
 
 @Component(
         service = LoginCookieManager.class,
@@ -55,12 +56,14 @@ public class SlingLoginCookieManager implements LoginCookieManager {
     long sessionTimeout;
     String cookieName;
 
+    Random random = new Random();
+
     @ObjectClassDefinition(
             name = "Apache Sling Token Update Configuration for OIDC Authentication Handler",
             description = "Apache Sling Token Update Configuration for OIDC Authentication Handler"
     )
 
-    @interface SlingUpdateConfig {
+    @interface SlingLoginCookieManagerConfig {
         @AttributeDefinition(name = "tokenFile",
                 description = "Token File")
         String tokenFile() default "cookie-tokens.bin";
@@ -79,7 +82,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
     }
 
     @Activate
-    public void activate(SlingUpdateConfig config, @NotNull BundleContext bundleContext)
+    public void activate(SlingLoginCookieManagerConfig config, @NotNull BundleContext bundleContext)
             throws InvalidKeyException, NoSuchAlgorithmException, IllegalStateException {
         final String tokenFileName = config.tokenFile();
         final File tokenFile = getTokenFile(tokenFileName, bundleContext);
@@ -98,8 +101,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         // get current authentication data, may be missing after first login
         String authData = null;
         try {
-            //TODO implement!
-            authData = tokenStore.encode(expires, "test");
+            authData = tokenStore.encode(expires, ((OidcAuthCredentials)creds).getUserId());
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         } catch (InvalidKeyException e) {
@@ -110,7 +112,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
     }
 
     @Override
-    public AuthenticationInfo verifyLoginCookie(HttpServletRequest request, HttpServletResponse response) {
+    public AuthenticationInfo verifyLoginCookie(HttpServletRequest request) {
         Cookie cookie = getLoginCookie(request);
         if (cookie == null) {
             return null;
@@ -182,6 +184,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         }
         response.addHeader("Set-Cookie", cookie.toString());
     }
+
     /**
      * Returns an absolute file indicating the file to use to persist the security
     4 * tokens.

@@ -21,7 +21,6 @@ import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.proc.BadJOSEException;
 import com.nimbusds.oauth2.sdk.AuthorizationCode;
 import com.nimbusds.oauth2.sdk.AuthorizationCodeGrant;
-import com.nimbusds.oauth2.sdk.AuthorizationErrorResponse;
 import com.nimbusds.oauth2.sdk.AuthorizationRequest;
 import com.nimbusds.oauth2.sdk.AuthorizationResponse;
 import com.nimbusds.oauth2.sdk.ErrorObject;
@@ -152,7 +151,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         @AttributeDefinition(name = "UserInfo Enabled",
                 description = "UserInfo Enabled")
-        String userInfoEnabled() default "true";
+        boolean userInfoEnabled() default true;
 
     }
 
@@ -175,7 +174,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.loginCookieManager = loginCookieManager;
         this.defaultConnectionName = config.defaultConnectionName();
         this.userInfoProcessor = userInfoProcessor;
-        this.userInfoEnabled = Boolean.parseBoolean(config.userInfoEnabled());
+        this.userInfoEnabled = config.userInfoEnabled();
 
         logger.debug("activate: registering ExternalIdentityProvider");
         bundleContext.registerService(
@@ -193,13 +192,14 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         logger.debug("inside extractCredentials");
 
         // Check if the request is authenticated by a oidc login token
-        AuthenticationInfo authInfo = loginCookieManager.verifyLoginCookie(request, response);
+        AuthenticationInfo authInfo = loginCookieManager.verifyLoginCookie(request);
         if (authInfo != null) {
             // User has a login token
             return authInfo;
         }
 
-        //The request is not authenticate. Check the Authorization Code
+        //The request is not authenticated. 
+        // 1. Check if the State cookie match with the state in the request received from the idp
         StringBuffer requestURL = request.getRequestURL();
         if ( request.getQueryString() != null )
             requestURL.append('?').append(request.getQueryString());
@@ -247,11 +247,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         if ( ! stateFromAuthServer.equals(stateFromClient) )
             throw new IllegalStateException("Failed state check: request keys from client and server are not the same");
 
-        if ( !authResponse.indicatesSuccess() ) {
-            AuthorizationErrorResponse errorResponse = authResponse.toErrorResponse();
-            throw new IllegalStateException("Authentication failed", new RuntimeException(toErrorMessage("Error in authentication response", errorResponse)));
-        }
-
+        // 2. The state cookie is valid, we can exchange an authorization code for an access token
         Optional<String> redirect = Optional.ofNullable(clientState.get().redirect());
         // TODO: find a better way to pass it?
         request.setAttribute(REDIRECT_ATTRIBUTE_NAME,redirect);
@@ -495,7 +491,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         if(loginCookieManager.getLoginCookie(request) !=null) {
             // A valid login cookie has been sent
-            // According to AuthenticationFeedbackHandler javadoc we send false to confirm that the request is authenticated
+            // According to AuthenticationFeedbackHandler javadoc we send because we did not send a redirect to the user
             return false;
         }
 

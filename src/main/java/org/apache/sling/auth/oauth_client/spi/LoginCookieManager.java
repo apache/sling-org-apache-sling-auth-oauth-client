@@ -44,7 +44,7 @@ public interface LoginCookieManager {
      * @param response
      * @return AuthenticationInfo
      */
-    AuthenticationInfo verifyLoginCookie(HttpServletRequest request, HttpServletResponse response);
+    AuthenticationInfo verifyLoginCookie(HttpServletRequest request);
 
     /**
      * Get the login cookie from the request. If the Authentication Handler do not verify the cookie, return null.

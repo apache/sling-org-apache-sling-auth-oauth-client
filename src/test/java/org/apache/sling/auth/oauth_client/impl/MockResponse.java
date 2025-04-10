@@ -23,11 +23,13 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 
 public class MockResponse implements HttpServletResponse {
     ArrayList<Cookie> cookies = new ArrayList();
+    HashMap<String, String> headers = new HashMap<>();
     String sendRedirect = null;
     int error=0;
     String errorMessage = null;
@@ -100,8 +102,6 @@ public class MockResponse implements HttpServletResponse {
 
     @Override
     public void setDateHeader(String name, long date) {
-        // TODO
-
     }
 
     @Override
@@ -112,14 +112,12 @@ public class MockResponse implements HttpServletResponse {
 
     @Override
     public void setHeader(String name, String value) {
-        // TODO
-
+        headers.put(name, value);
     }
 
     @Override
     public void addHeader(String name, String value) {
-        // TODO
-
+        headers.put(name, value);
     }
 
     @Override
@@ -155,7 +153,7 @@ public class MockResponse implements HttpServletResponse {
     @Override
     public String getHeader(String name) {
         // TODO
-        return null;
+        return headers.get(name);
     }
 
     @Override

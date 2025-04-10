@@ -31,8 +31,10 @@ import net.minidev.json.JSONObject;
 import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
+import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.jcr.api.SlingRepository;
+import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -137,6 +139,15 @@ class OidcAuthenticationHandlerTest {
     }
 
     @Test
+    void extractCredentialsWithLoginCookie() {
+        //Test without any cookie
+        when(loginCookieManager.verifyLoginCookie(request)).thenReturn(AuthenticationInfo.FAIL_AUTH);
+        createOidcAuthenticationHandler();
+
+        assertEquals(AuthenticationInfo.FAIL_AUTH, oidcAuthenticationHandler.extractCredentials(request, response));
+    }
+
+    @Test
     void extractCredentialsWithoutExpectedCookies() {
         //Test without the expected cookie
         when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1%7Cpart2");
@@ -216,7 +227,7 @@ class OidcAuthenticationHandlerTest {
 
         //Test with a id token signed by another key, and expired
         RuntimeException exception = assertThrows(RuntimeException.class, () -> {
-            extractCredentials_WithMatchinState_WithValidConnection_WithIdToken("eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJ0MnFtQ2I2YTJIcHJxR3FZbmhWQm92cUdKRExZam9VTEgxSTNDVkZCRnhBIn0.eyJleHAiOjE3NDQwMTM4MTYsImlhdCI6MTc0NDAxMzUxNiwiYXV0aF90aW1lIjoxNzQ0MDEzNTExLCJqdGkiOiI5NmE5YWI3NS0yNTIzLTQyMjQtOTU5Zi00ZTQ5MWNiZGUyYWUiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjU2OTY3L3JlYWxtcy9zbGluZyIsImF1ZCI6Im9pZGMtdGVzdCIsInN1YiI6Ijk2OGQ4MDhjLTU5MjMtNDFiOS1iOTZjLWNhNzJiMWZlOTMzOSIsInR5cCI6IklEIiwiYXpwIjoib2lkYy10ZXN0Iiwic2Vzc2lvbl9zdGF0ZSI6IjMzMTM4YTMzLTM4MjgtNDk0OS1iMTRhLWQ2Y2IyNjcxNWRlOSIsImF0X2hhc2giOiJ4enlkbVlxdW9xYm9TZjJkaHJhdmNBIiwiYWNyIjoiMSIsInNpZCI6IjMzMTM4YTMzLTM4MjgtNDk0OS1iMTRhLWQ2Y2IyNjcxNWRlOSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicHJlZmVycmVkX3VzZXJuYW1lIjoidGVzdCIsImdpdmVuX25hbWUiOiIiLCJmYW1pbHlfbmFtZSI6IiJ9.GGBOBoi9i0Y2NhT0Ypl_DT9Cy98qHh3XuM0E3Ol8zChsDM53RwMGbkI_Rl3t5k4MCl9_bVXMyCy-0X6OsUW6xfN5WY_ET6G_l39Xdk5BXgZUwpVQc03Z0wD7SCN718QkeWc0bi9ucfyE6GHxLKQL3q6rlG0BzH7nQHha74mQW3naZFWvKJTrRng7Zr_ZQOQDEZTSW8sXq_qabQhkJ-j8yeepVnP4Ws5rkqcs0UixZpRvsmYIv5rep5AHDOKHN6SOra42hxREhZaG7Rga9n-T7Zr5_7pajaLElf6TUkdBOol3x6hFH24RbhtxoPIIeqEOUPkGZkrXhHzR4bIKrVa8pB", rsaJWK);
+            extractCredentials_WithMatchinState_WithValidConnection_WithIdToken("eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJ0MnFtQ2I2YTJIcHJxR3FZbmhWQm92cUdKRExZam9VTEgxSTNDVkZCRnhBIn0.eyJleHAiOjE3NDQwMTM4MTYsImlhdCI6MTc0NDAxMzUxNiwiYXV0aF90aW1lIjoxNzQ0MDEzNTExLCJqdGkiOiI5NmE5YWI3NS0yNTIzLTQyMjQtOTU5Zi00ZTQ5MWNiZGUyYWUiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjU2OTY3L3JlYWxtcy9zbGluZyIsImF1ZCI6Im9pZGMtdGVzdCIsInN1YiI6Ijk2OGQ4MDhjLTU5MjMtNDFiOS1iOTZjLWNhNzJiMWZlOTMzOSIsInR5cCI6IklEIiwiYXpwIjoib2lkYy10ZXN0Iiwic2Vzc2lvbl9zdGF0ZSI6IjMzMTM4YTMzLTM4MjgtNDk0OS1iMTRhLWQ2Y2IyNjcxNWRlOSIsImF0X2hhc2giOiJ4enlkbVlxdW9xYm9TZjJkaHJhdmNBIiwiYWNyIjoiMSIsInNpZCI6IjMzMTM4YTMzLTM4MjgtNDk0OS1iMTRhLWQ2Y2IyNjcxNWRlOSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicHJlZmVycmVkX3VzZXJuYW1lIjoidGVzdCIsImdpdmVuX25hbWUiOiIiLCJmYW1pbHlfbmFtZSI6IiJ9.GGBOBoi9i0Y2NhT0Ypl_DT9Cy98qHh3XuM0E3Ol8zChsDM53RwMGbkI_Rl3t5k4MCl9_bVXMyCy-0X6OsUW6xfN5WY_ET6G_l39Xdk5BXgZUwpVQc03Z0wD7SCN718QkeWc0bi9ucfyE6GHxLKQL3q6rlG0BzH7nQHha74mQW3naZFWvKJTrRng7Zr_ZQOQDEZTSW8sXq_qabQhkJ-j8yeepVnP4Ws5rkqcs0UixZpRvsmYIv5rep5AHDOKHN6SOra42hxREhZaG7Rga9n-T7Zr5_7pajaLElf6TUkdBOol3x6hFH24RbhtxoPIIeqEOUPkGZkrXhHzR4bIKrVa8pB", rsaJWK, "http://localhost:4567");
         });
         assertEquals("Signed JWT rejected: Another algorithm expected, or no matching key(s) found", exception.getMessage());
 
@@ -230,7 +241,7 @@ class OidcAuthenticationHandlerTest {
 
         //Test with a id token with a wrong client id
         RuntimeException exception = assertThrows(RuntimeException.class, () -> {
-            extractCredentials_WithMatchinState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "wrong-client-id", ISSUER), rsaJWK);
+            extractCredentials_WithMatchinState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "wrong-client-id", ISSUER), rsaJWK, "http://localhost:4567");
         });
         assertEquals("Unexpected JWT audience: [wrong-client-id]", exception.getMessage());
     }
@@ -243,20 +254,46 @@ class OidcAuthenticationHandlerTest {
 
         //Test with a id token signed but with a wrong issuer
         RuntimeException exception = assertThrows(RuntimeException.class, () -> {
-            extractCredentials_WithMatchinState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", "wrong-issuer"), rsaJWK);
+            extractCredentials_WithMatchinState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", "wrong-issuer"), rsaJWK, "http://localhost:4567");
         });
         assertEquals("Unexpected JWT issuer: wrong-issuer", exception.getMessage());
     }
 
+//    @Test
+//    void extractCredentials_WithMatchinState_WithValidConnection_WithWrongUrl() throws IOException, JOSEException {
+//        RSAKey rsaJWK = new RSAKeyGenerator(2048)
+//                .keyID("123")
+//                .generate();
+//
+//        //Test with a id token with a wrong client id
+//        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+//            extractCredentials_WithMatchinState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "localhost:4567");
+//        });
+//        assertEquals("Unexpected JWT audience: [wrong-client-id]", exception.getMessage());
+//    }
 
     @Test
-    void extractCredentials_WithMatchinState_WithValidConnection_WithValidIdToken() throws IOException, JOSEException {
+    void extractCredentials_WithMatchinState_WithValidConnection_WithValidIdToken_WithUserInfo() throws IOException, JOSEException {
         RSAKey rsaJWK = new RSAKeyGenerator(2048)
                 .keyID("123")
                 .generate();
-
+        when(config.userInfoEnabled()).thenReturn(true);
+        userInfoProcessor = new UserInfoProcessorImpl();
         //Test with a id token signed by another key, and expired
-        AuthenticationInfo authInfo = extractCredentials_WithMatchinState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK);
+        AuthenticationInfo authInfo = extractCredentials_WithMatchinState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567");
+        assertEquals("1234567890", authInfo.get("user.name"));
+        assertEquals("testUser", ((OidcAuthCredentials)authInfo.get("user.jcr.credentials")).getAttribute("profile/name"));
+    }
+
+    @Test
+    void extractCredentials_WithMatchinState_WithValidConnection_WithValidIdToken_WithoutUserInfo() throws IOException, JOSEException {
+        RSAKey rsaJWK = new RSAKeyGenerator(2048)
+                .keyID("123")
+                .generate();
+        when(config.userInfoEnabled()).thenReturn(false);
+        userInfoProcessor = new UserInfoProcessorImpl();
+        //Test with a id token signed by another key, and expired
+        AuthenticationInfo authInfo = extractCredentials_WithMatchinState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567");
         assertEquals("1234567890", authInfo.get("user.name"));
     }
 
@@ -291,9 +328,9 @@ class OidcAuthenticationHandlerTest {
         return token;
 
     }
-    private AuthenticationInfo extractCredentials_WithMatchinState_WithValidConnection_WithIdToken(String idToken, RSAKey rsaJWK) throws IOException, JOSEException {
-        HttpServer tokenEndpointServer = createHttpServer();
-        tokenEndpointServer.createContext("/token", exchange -> {
+    private AuthenticationInfo extractCredentials_WithMatchinState_WithValidConnection_WithIdToken(String idToken, RSAKey rsaJWK, String baseUrl) throws IOException, JOSEException {
+        HttpServer idpServer = createHttpServer();
+        idpServer.createContext("/token", exchange -> {
                     exchange.getResponseHeaders().add("Content-Type", "application/json");
                     String response = "{\"access_token\":\"myAccessToken\"," +
                             "\"expires_in\":\"360\"," +
@@ -306,23 +343,36 @@ class OidcAuthenticationHandlerTest {
                     exchange.getResponseBody().write(response.getBytes());
                     exchange.close();
                 });
-        confgureWellKnownOidcMetadata(tokenEndpointServer, rsaJWK);
+        idpServer.createContext("/userinfo", exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            String response = "{" +
+                    "\"sub\":\"1234567890\"," +
+                    "\"name\":\"testUser\"," +
+                    "\"groups\":\"[testGroup]\"" +
+                    "}";
+
+            exchange.sendResponseHeaders(200, response.length());
+            exchange.getResponseBody().write(response.getBytes());
+            exchange.close();
+        });
+
+        configureWellKnownOidcMetadata(idpServer, rsaJWK, baseUrl);
 
         when(config.callbackUri()).thenReturn("http://redirect");
 
         //This is the class used by Sling to configure the Authentication Handler
         OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
-        String mockIdPUrl = "http://localhost:"+tokenEndpointServer.getAddress().getPort();
+        String mockIdPUrl = "http://localhost:"+idpServer.getAddress().getPort();
         when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl+"/jwks.json"));
         when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
         when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl+"/authorize"));
         when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
-
+        when(oidcProviderMetadataRegistry.getUserInfoEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/userinfo"));
         connections.add(new MockOidcConnection(new String[] {"openid"},
                 MOCK_OIDC_PARAM,
                 "client-id",
                 "client-secret",
-                "http://localhost:"+tokenEndpointServer.getAddress().getPort(),
+                "http://localhost:"+idpServer.getAddress().getPort(),
                 new String[] { "access_type=offline" } ,
                 oidcProviderMetadataRegistry)
         );
@@ -339,7 +389,7 @@ class OidcAuthenticationHandlerTest {
 
     }
 
-    private void confgureWellKnownOidcMetadata(HttpServer server, RSAKey rsaJWK) throws JOSEException {
+    private void configureWellKnownOidcMetadata(HttpServer server, RSAKey rsaJWK, String baseUrl) throws JOSEException {
 
         // Public JWK Set
         JWKSet publicJWKSet = new JWKSet(rsaJWK.toPublicJWK());
@@ -355,7 +405,6 @@ class OidcAuthenticationHandlerTest {
         // Serve .well-known OpenID configuration
         server.createContext("/.well-known/openid-configuration", exchange -> {
             exchange.getResponseHeaders().add("Content-Type", "application/json");
-            String baseUrl = "http://localhost:4567";
 
             Map<String, Object> config = new HashMap<>();
             config.put("issuer", ISSUER);
@@ -468,6 +517,53 @@ class OidcAuthenticationHandlerTest {
     }
 
     @Test
-    void authenticationSucceeded() {
+    void authenticationSucceededLoginManagerNotAvailable() {
+        loginCookieManager = null;
+        createOidcAuthenticationHandler();
+        assertFalse(oidcAuthenticationHandler.authenticationSucceeded(request, response, new AuthenticationInfo("oidc", "testUser")));
     }
+
+    @Test
+    void authenticationSucceededLoginManagerWithLoginCookie() {
+        when(loginCookieManager.getLoginCookie(request)).thenReturn(new Cookie("test", "test"));
+        createOidcAuthenticationHandler();
+        assertFalse(oidcAuthenticationHandler.authenticationSucceeded(request, response, new AuthenticationInfo("oidc", "testUser")));
+    }
+
+    @Test
+    void authenticationSucceededLoginManagerWithNoLoginCookie() {
+        when(loginCookieManager.getLoginCookie(request)).thenReturn(null);
+        MockResponse response = new MockResponse();
+        when(request.getRequestURL()).thenReturn(new StringBuffer("http://localhost:8080"));
+        when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
+        when(request.getCookies()).thenReturn(null);
+        when(config.defaultRedirect()).thenReturn("http://localhost:8080");
+
+        createOidcAuthenticationHandler();
+        AuthenticationInfo authInfo = new AuthenticationInfo("oidc", "testUser");
+        OidcAuthCredentials credentials = new OidcAuthCredentials("testUser", "oidc");
+        credentials.setAttribute(".token", "testToken");
+        authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
+        assertTrue(oidcAuthenticationHandler.authenticationSucceeded(request, response, authInfo ));
+        assertEquals("http://localhost:8080", response.getSendRedirect() );
+    }
+
+    @Test
+    void authenticationSucceededLoginManagerWithNoLoginCookieWithRedirect() {
+        when(loginCookieManager.getLoginCookie(request)).thenReturn(null);
+        MockResponse response = new MockResponse();
+        MockRequest request = new MockRequest();
+        request.setAttribute(OidcAuthenticationHandler.REDIRECT_ATTRIBUTE_NAME, "http://localhost:8080/redirect");
+
+        when(config.defaultRedirect()).thenReturn("http://localhost:8080");
+
+        createOidcAuthenticationHandler();
+        AuthenticationInfo authInfo = new AuthenticationInfo("oidc", "testUser");
+        OidcAuthCredentials credentials = new OidcAuthCredentials("testUser", "oidc");
+        credentials.setAttribute(".token", "testToken");
+        authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
+        assertTrue(oidcAuthenticationHandler.authenticationSucceeded(request, response, authInfo ));
+        assertEquals("http://localhost:8080/redirect", response.getSendRedirect() );
+    }
+
 }

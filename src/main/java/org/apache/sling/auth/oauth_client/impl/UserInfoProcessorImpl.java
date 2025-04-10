@@ -39,11 +39,7 @@ public class UserInfoProcessorImpl implements UserInfoProcessor {
 
     @Override
     public OidcAuthCredentials process(UserInfo userInfo, TokenResponse tokenResponse, String oidcSbject, String idp) {
-        logger.debug("Prefered Username: " + userInfo.getPreferredUsername());
-        logger.debug("Subject: " + userInfo.getSubject());
-        logger.debug("Email: " + userInfo.getEmailAddress());
-        logger.debug("Name: " + userInfo.getGivenName());
-        logger.debug("FamilyName: " + userInfo.getFamilyName());
+
         OAuthTokens tokens = Converter.toSlingOAuthTokens(tokenResponse.toSuccessResponse().getTokens());
 
         // Create AuthenticationInfo object
@@ -51,6 +47,12 @@ public class UserInfoProcessorImpl implements UserInfoProcessor {
         credentials.setAttribute(".token", "");
 
         if (userInfo != null) {
+            logger.debug("Prefered Username: " + userInfo.getPreferredUsername());
+            logger.debug("Subject: " + userInfo.getSubject());
+            logger.debug("Email: " + userInfo.getEmailAddress());
+            logger.debug("Name: " + userInfo.getGivenName());
+            logger.debug("FamilyName: " + userInfo.getFamilyName());
+
             Object groups = userInfo.toJSONObject().remove("groups");
             if (groups != null && groups instanceof JSONArray) {
                 logger.debug("Groups: " + groups.toString());
