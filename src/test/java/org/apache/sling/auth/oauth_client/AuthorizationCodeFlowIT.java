@@ -59,7 +59,6 @@ import org.apache.sling.testing.clients.ClientException;
 import org.apache.sling.testing.clients.SlingClient;
 import org.apache.sling.testing.clients.SlingHttpResponse;
 import org.apache.sling.testing.clients.osgi.OsgiConsoleClient;
-import org.junit.Rule;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,6 +78,7 @@ class AuthorizationCodeFlowIT {
     private static final String CRYPTO_SERVICE_PID = JasyptStandardPbeStringCryptoService.class.getName();
     
     private static final String OIDC_CONFIG_PID = OidcConnectionImpl.class.getName();
+    private static final int MAX_RETRY = 10;
     private static SupportBundle supportBundle;
 
     private static final String OIDC_AUTHENTICATION_HANDLER_PID = "org.apache.sling.auth.oauth_client.impl.OidcAuthenticationHandler";
@@ -95,9 +95,6 @@ class AuthorizationCodeFlowIT {
     private List<String> configPidsToCleanup = new ArrayList<>();
     private int slingPort;
 
-    @Rule
-    public RetryRule retryRule = new RetryRule(System.getProperty("retryAttempt")==null?6:Integer.parseInt(System.getProperty("retryAttempt")));
-    
     @BeforeAll
     static void createSupportBundle(@TempDir Path tempDir) throws IOException {
         
@@ -196,14 +193,26 @@ class AuthorizationCodeFlowIT {
         
         // clean up any existing tokens
         String userPath = getUserPath(sling, sling.getUser());
-        sling.deletePath(userPath + "/oauth-tokens/" + oidcConnectionName, 200);
-        sling.doGet(userPath + "/oauth-tokens/" + oidcConnectionName, 404);
-        
-        // kick off oidc auth
-        SlingHttpResponse entryPointResponse = sling.doGet("/system/sling/oauth/entry-point", List.of(new BasicNameValuePair("c", oidcConnectionName)), 302);
-        Header locationHeader = entryPointResponse.getFirstHeader("location");
+        Header locationHeader = null;
+        SlingHttpResponse entryPointResponse = null;
+        for (int count = 0; count < MAX_RETRY; count++) {
+            sling.deletePath(userPath + "/oauth-tokens/" + oidcConnectionName, 200);
+            sling.doGet(userPath + "/oauth-tokens/" + oidcConnectionName, 404);
+
+            // kick off oidc auth
+            entryPointResponse = sling.doGet("/system/sling/oauth/entry-point", List.of(new BasicNameValuePair("c", oidcConnectionName)), 302);
+            locationHeader = entryPointResponse.getFirstHeader("location");
+            if (locationHeader.getValue().startsWith("http://localhost:" + keycloakPort)) {
+                break;
+            } else {
+                // wait for the osgi configuration to be applied
+                System.out.println("Waiting for the osgi configuration to be applied");
+                Thread.sleep(200);
+            }
+        }
         assertThat(locationHeader.getElements()).as("Location header value from entry-point request")
-            .singleElement().asString().startsWith("http://localhost:" + keycloakPort);
+                .singleElement().asString().startsWith("http://localhost:" + keycloakPort);
+
         String locationHeaderValue = locationHeader.getValue();
         
         DefaultCookieSpec cookieSpec = new DefaultCookieSpec();
@@ -372,7 +381,6 @@ class AuthorizationCodeFlowIT {
                         "defaultRedirect", TEST_PATH+".html"
                 )
         ));
-
 
         // clean up any existing tokens
         String userPath = getUserPath(sling, sling.getUser());
