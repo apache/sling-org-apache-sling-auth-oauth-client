@@ -59,6 +59,7 @@ import org.apache.sling.testing.clients.ClientException;
 import org.apache.sling.testing.clients.SlingClient;
 import org.apache.sling.testing.clients.SlingHttpResponse;
 import org.apache.sling.testing.clients.osgi.OsgiConsoleClient;
+import org.junit.Rule;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -85,7 +86,6 @@ class AuthorizationCodeFlowIT {
     private static final String SYNC_HANDLER_PID = "org.apache.jackrabbit.oak.spi.security.authentication.external.impl.DefaultSyncHandler";
     private static final String EXTERNAL_LOGIN_MODULE_FACTORY_PID = "org.apache.jackrabbit.oak.spi.security.authentication.external.impl.ExternalLoginModuleFactory";
     public static final String TEST_PATH = "/content/test-1";
-//    public static final String TEST_PATH = "/system/sling/login";
     private KeycloakContainer keycloak;
     private SlingClient sling;
     private SlingClient slingUser;
@@ -95,6 +95,8 @@ class AuthorizationCodeFlowIT {
     private List<String> configPidsToCleanup = new ArrayList<>();
     private int slingPort;
 
+    @Rule
+    public RetryRule retryRule = new RetryRule(System.getProperty("retryAttempt")==null?6:Integer.parseInt(System.getProperty("retryAttempt")));
     
     @BeforeAll
     static void createSupportBundle(@TempDir Path tempDir) throws IOException {
