@@ -253,9 +253,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         request.setAttribute(REDIRECT_ATTRIBUTE_NAME,redirect);
 
         String desiredConnectionName = clientState.get().connectionName();
-        if ( desiredConnectionName == null || desiredConnectionName.isEmpty() )
-            throw new IllegalArgumentException("No connection found in clientState");
-
         ClientConnection connection = connections.get(desiredConnectionName);
         if ( connection == null )
             throw new IllegalArgumentException(String.format("Requested unknown connection '%s'", desiredConnectionName));

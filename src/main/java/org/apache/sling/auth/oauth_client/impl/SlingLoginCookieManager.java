@@ -40,7 +40,6 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.util.Random;
 
 @Component(
         service = LoginCookieManager.class,
@@ -55,8 +54,6 @@ public class SlingLoginCookieManager implements LoginCookieManager {
     private TokenStore tokenStore;
     long sessionTimeout;
     String cookieName;
-
-    Random random = new Random();
 
     @ObjectClassDefinition(
             name = "Apache Sling Token Update Configuration for OIDC Authentication Handler",

@@ -195,6 +195,7 @@ class AuthorizationCodeFlowIT {
         String userPath = getUserPath(sling, sling.getUser());
         Header locationHeader = null;
         SlingHttpResponse entryPointResponse = null;
+        //Retry the get since the OSGi configuration might not be applied yet
         for (int count = 0; count < MAX_RETRY; count++) {
             sling.deletePath(userPath + "/oauth-tokens/" + oidcConnectionName, 200);
             sling.doGet(userPath + "/oauth-tokens/" + oidcConnectionName, 404);
