@@ -101,7 +101,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private final Map<String, ClientConnection> connections;
     private final OAuthStateManager stateManager;
 
-    String idp;
+    private String idp;
 
     private  final String callbackUri;
 
@@ -112,8 +112,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private String defaultConnectionName;
 
     private UserInfoProcessor userInfoProcessor;
-
-    private static final long serialVersionUID = 1L;
 
     private boolean userInfoEnabled;
 
@@ -269,6 +267,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         URI tokenEndpoint;
         TokenRequest tokenRequest;
         HTTPResponse httpResponse;
+        TokenResponse tokenResponse;
+        IDTokenClaimsSet claims;
         try {
             tokenEndpoint = new URI(conn.tokenEndpoint());
             tokenRequest = new TokenRequest.Builder(
@@ -283,28 +283,24 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             // see also https://bitbucket.org/connect2id/oauth-2.0-sdk-with-openid-connect-extensions/issues/107/support-application-x-www-form-urlencoded
             httpRequest.setAccept("application/json");
             httpResponse = httpRequest.send();
+
+            // extract id token from the response
+            tokenResponse = OIDCTokenResponseParser.parse(httpResponse);
+
+            if ( !tokenResponse.indicatesSuccess() ) {
+                logger.debug("Token error. Received code: {}, message: {}", tokenResponse.toErrorResponse().getErrorObject().getCode(), tokenResponse.toErrorResponse().getErrorObject().getDescription());
+                throw  new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse()));
+            }
+            tokenResponse = tokenResponse.toSuccessResponse();
+
+            claims = validateIdToken(tokenResponse, conn);
+
         } catch (URISyntaxException e) {
             logger.error("Token Endpoint is not a valid URI: {} Error: {}", conn.tokenEndpoint(), e.getMessage());
             throw new RuntimeException(String.format("Token Endpoint is not a valid URI: %s", conn.tokenEndpoint()));
         } catch (IOException e) {
             logger.error("Failed to exchange authorization code for access token: {}", e.getMessage(), e);
             throw new RuntimeException(e);
-        }
-
-
-        // extract id token from the response
-        TokenResponse tokenResponse;
-        IDTokenClaimsSet claims;
-        try {
-            tokenResponse = OIDCTokenResponseParser.parse(httpResponse);
-
-            if ( !tokenResponse.indicatesSuccess() ) {
-                logger.debug("Token error. Received code: {}, message: {}", tokenResponse.toErrorResponse().getErrorObject().getCode(), tokenResponse.toErrorResponse().getErrorObject().getDescription());
-                throw new IllegalStateException("Token exchange error", new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse())));
-            }
-            tokenResponse = tokenResponse.toSuccessResponse();
-
-            claims = validateIdToken(tokenResponse, conn);
         } catch (ParseException e) {
             logger.error("Failed to parse token response: {}", e.getMessage(), e);
             throw new RuntimeException(e.getMessage());
@@ -312,6 +308,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             logger.error("Failed to validate token: {}", e.getMessage(), e);
             throw new RuntimeException(e.getMessage());
         }
+
         // Make the request to userInfo
         String subject = claims.getSubject().getValue();
         OidcAuthCredentials credentials;
@@ -326,7 +323,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 if (!userInfoResponse.indicatesSuccess()) {
                     // The request failed, e.g. due to invalid or expired token
                     logger.debug("UserInfo error. Received code: {}, message: {}", userInfoResponse.toErrorResponse().getErrorObject().getCode(), userInfoResponse.toErrorResponse().getErrorObject().getDescription());
-                    throw new IllegalStateException("Token exchange error", new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse())));
+                    throw  new RuntimeException(toErrorMessage("Error in userinfo response", userInfoResponse.toErrorResponse()));
 
                 }
 
@@ -338,7 +335,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
             } catch (IOException | URISyntaxException | ParseException e) {
                 logger.error("Error while processing UserInfo: {}", e.getMessage(), e);
-                throw new IllegalStateException(e);
+                throw new RuntimeException(e);
             }
         } else {
             credentials = userInfoProcessor.process(null, tokenResponse, subject, idp);
@@ -349,8 +346,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         logger.info("User {} authenticated", subject);
         return authInfo;
-
-
     }
 
     /**
@@ -371,20 +366,14 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
      * @throws BadJOSEException If the ID token is invalid.
      * @throws JOSEException     If there is an error during validation.
      */
-    private IDTokenClaimsSet validateIdToken(TokenResponse tokenResponse, ResolvedOidcConnection conn) throws BadJOSEException, JOSEException {
+    private IDTokenClaimsSet validateIdToken(TokenResponse tokenResponse, ResolvedOidcConnection conn) throws BadJOSEException, JOSEException, MalformedURLException {
         Issuer issuer = new Issuer(conn.issuer());
         ClientID clientID = new ClientID(conn.clientId());
         JWSAlgorithm jwsAlg = JWSAlgorithm.RS256; //TODO: Read from config
-        URL jwkSetURL = null;
-        try {
-            jwkSetURL = conn.jwkSetURL().toURL();
-        } catch (MalformedURLException e) {
-            throw new IllegalArgumentException(e);
-        }
+        URL jwkSetURL = conn.jwkSetURL().toURL();
 
         IDTokenValidator validator = new IDTokenValidator(issuer, clientID, jwsAlg, jwkSetURL);
         return validator.validate(tokenResponse.toSuccessResponse().getTokens().toOIDCTokens().getIDToken(), null);
-
     }
 
     private static String toErrorMessage(String context, ErrorResponse error) {
@@ -410,7 +399,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         logger.debug("inside requestCredentials");
         String desiredConnectionName = request.getParameter("c");
         if ( desiredConnectionName == null ) {
-            logger.debug("Missing mandatory request parameter 'c' using default connection '{}'", defaultConnectionName);
+            logger.debug("Missing mandatory request parameter 'c' using default connection");
             desiredConnectionName = defaultConnectionName;
         }
         try {
@@ -426,8 +415,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             response.sendRedirect(redirect.uri().toString());
             return true;
         } catch (IOException e) {
-            logger.error("Unexpected error while sending redirect.", e);
-            return false;
+            logger.error("Error while redirecting to default redirect: {}", e.getMessage(), e);
+            throw new RuntimeException(e);
         }
     }
 
@@ -471,8 +460,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         return new OAuthEntryPointServlet.RedirectTarget(authRequestBuilder.build().toURI(), cookie);
     }
 
-    record RedirectTarget(URI uri, Cookie cookie) {}
-
     @Override
     public void dropCredentials(HttpServletRequest request, HttpServletResponse response) {
         // TODO: perform logout from Sling and redirect?
@@ -512,6 +499,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                     response.sendRedirect(defaultRedirect);
                 }
             } catch (IOException e) {
+                logger.error("Error while redirecting to default redirect: {}", e.getMessage(), e);
                 throw new RuntimeException(e);
             }
         }

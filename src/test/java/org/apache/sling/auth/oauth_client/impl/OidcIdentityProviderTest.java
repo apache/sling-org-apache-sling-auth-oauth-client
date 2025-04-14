@@ -18,6 +18,7 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentity;
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentityException;
+import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalUser;
 import org.apache.jackrabbit.oak.spi.security.authentication.token.TokenConstants;
 import org.apache.sling.auth.oauth_client.impl.OidcIdentityProvider.OidcGroupRef;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
@@ -115,12 +116,62 @@ class OidcIdentityProviderTest {
     }
 
     @Test
-    void getIdentityInvalidIdp() throws ExternalIdentityException {
+    void getIdentityInvalidIdp() {
         OidcGroupRef groupRef = mock(OidcGroupRef.class);
         when(groupRef.getProviderName()).thenReturn("test");
 
         OidcIdentityProvider test = new OidcIdentityProvider("myIdp");
         assertNull(test.getIdentity(groupRef));
+    }
+
+    @Test
+    void authenticateSuccess() {
+        OidcIdentityProvider test = new OidcIdentityProvider("test");
+        Credentials credentials = new OidcAuthCredentials("userId", "test");
+        ExternalIdentity externalIdentity = test.authenticate(credentials);
+        assertTrue(externalIdentity instanceof ExternalUser);
+    }
+
+    @Test
+    void authenticateFailure() {
+        OidcIdentityProvider test = new OidcIdentityProvider("test");
+        Credentials credentials = new OidcAuthCredentials("userId", "wrong-idp");
+        assertNull(test.authenticate(credentials));
+    }
+
+    @Test
+    void fromExternalIdentityRefSuccess() throws ExternalIdentityException {
+        OidcGroupRef groupRef = mock(OidcGroupRef.class);
+        when(groupRef.getProviderName()).thenReturn("test");
+        when(groupRef.getId()).thenReturn("test");
+
+        OidcIdentityProvider test = new OidcIdentityProvider("test");
+        String result = test.fromExternalIdentityRef(groupRef);
+        assertEquals("test", result);
+    }
+
+    @Test
+    void fromExternalIdentityRefFailure() throws ExternalIdentityException {
+        OidcGroupRef groupRef = mock(OidcGroupRef.class);
+        when(groupRef.getProviderName()).thenReturn("test");
+        when(groupRef.getId()).thenReturn("test");
+        when(groupRef.getString()).thenReturn("test");
+
+        OidcIdentityProvider test = new OidcIdentityProvider("wrong-idp");
+        ExternalIdentityException exception = assertThrows(ExternalIdentityException.class, () -> {
+            test.fromExternalIdentityRef(groupRef);
+        });
+        assertEquals("Foreign IDP test", exception.getMessage());
+    }
+
+
+    @Test
+    void unsupportedMethods() {
+        OidcIdentityProvider test = new OidcIdentityProvider("test");
+        assertThrows(UnsupportedOperationException.class, () -> test.getUser("userId"));
+        assertThrows(UnsupportedOperationException.class, () -> test.getGroup("groupId"));
+        assertThrows(UnsupportedOperationException.class, () -> test.listUsers());
+        assertThrows(UnsupportedOperationException.class, () -> test.listGroups());
     }
 
     @Test
