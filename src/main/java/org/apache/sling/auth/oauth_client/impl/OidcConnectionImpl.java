@@ -25,7 +25,6 @@ import org.osgi.service.metatype.annotations.AttributeDefinition;
 import org.osgi.service.metatype.annotations.AttributeType;
 import org.osgi.service.metatype.annotations.Designate;
 import org.osgi.service.metatype.annotations.ObjectClassDefinition;
-
 import java.net.URI;
 
 // TODO - bad name
@@ -35,18 +34,9 @@ public class OidcConnectionImpl implements ClientConnection {
 
     @ObjectClassDefinition(name = "OpenID Connect connection details")
     public @interface Config {
-        @AttributeDefinition(name = "name",
-                description = "Name")
         String name();
-
-        @AttributeDefinition(name = "baseUrl",
-                description = "Base URI")
         String baseUrl();
-
-        @AttributeDefinition(name = "clientId",
-                description = "ClientId")
         String clientId();
-
         @AttributeDefinition(type = AttributeType.PASSWORD) String clientSecret();
         String[] scopes();
         String[] additionalAuthorizationParameters();
