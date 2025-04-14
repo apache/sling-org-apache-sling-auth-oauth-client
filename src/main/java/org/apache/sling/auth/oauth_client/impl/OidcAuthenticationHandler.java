@@ -405,7 +405,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         try {
             ClientConnection connection = connections.get(desiredConnectionName);
             if ( connection == null ) {
-                logger.debug("Client requested unknown connection '{}'; known: '{}'", desiredConnectionName, connections.keySet());
+                logger.debug("Client requested unknown connection");
                 response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Client requested unknown connection");
                 return false;
             }
