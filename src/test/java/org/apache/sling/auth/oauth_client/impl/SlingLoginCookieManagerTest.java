@@ -63,8 +63,7 @@ class SlingLoginCookieManagerTest {
         when(bundleContext.getDataFile("cookie-tokens")).thenReturn(tempFile);
 
 
-        slingLoginCookieManager = new SlingLoginCookieManager();
-        slingLoginCookieManager.activate(config,bundleContext);
+        slingLoginCookieManager = new SlingLoginCookieManager(config, bundleContext);
 
     }
     @Test

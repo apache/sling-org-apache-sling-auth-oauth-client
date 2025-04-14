@@ -637,7 +637,7 @@ class OidcAuthenticationHandlerTest {
             String response = "{" +
                     "\"sub\":\"1234567890\"," +
                     "\"name\":\"testUser\"," +
-                    "\"groups\":\"[testGroup]\"" +
+                    "\"groups\":[\"testGroup\"]" +
                     "}";
 
             exchange.sendResponseHeaders(200, response.length());
@@ -872,6 +872,21 @@ class OidcAuthenticationHandlerTest {
         });
         assertEquals("java.io.IOException: Mocked Exception", exception.getMessage());
 
+    }
+
+    @Test
+    void resolveOidcConnectionTest() {
+        OidcConnectionImpl oidcClientConnection = mock(OidcConnectionImpl.class);
+        when(oidcClientConnection.scopes()).thenReturn(new String[0]);
+        when(oidcClientConnection.additionalAuthorizationParameters()).thenReturn(new String[0]);
+        assertTrue(ResolvedOidcConnection.resolve(oidcClientConnection) instanceof ResolvedOidcConnection);
+
+        OAuthConnectionImpl oauthClientConnection= mock(OAuthConnectionImpl.class);
+        when(oauthClientConnection.name()).thenReturn("test");
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            ResolvedOidcConnection.resolve(oauthClientConnection);
+        });
+        assertEquals("Unable to resolve ClientConnection (name=test) of type org.apache.sling.auth.oauth_client.impl.OAuthConnectionImpl", exception.getMessage());
     }
 
 }

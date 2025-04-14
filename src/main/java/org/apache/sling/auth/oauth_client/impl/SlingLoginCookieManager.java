@@ -23,7 +23,6 @@ import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
-import org.jetbrains.annotations.NotNull;
 import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -79,7 +78,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
     }
 
     @Activate
-    public void activate(SlingLoginCookieManagerConfig config, @NotNull BundleContext bundleContext)
+    public SlingLoginCookieManager(SlingLoginCookieManagerConfig config, BundleContext bundleContext)
             throws InvalidKeyException, NoSuchAlgorithmException, IllegalStateException {
         final String tokenFileName = config.tokenFile();
         final File tokenFile = getTokenFile(tokenFileName, bundleContext);
