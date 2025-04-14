@@ -18,6 +18,7 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentity;
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentityException;
+import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentityRef;
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalUser;
 import org.apache.jackrabbit.oak.spi.security.authentication.token.TokenConstants;
 import org.apache.sling.auth.oauth_client.impl.OidcIdentityProvider.OidcGroupRef;
@@ -125,10 +126,20 @@ class OidcIdentityProviderTest {
     }
 
     @Test
-    void authenticateSuccess() {
+    void authenticateSuccess() throws ExternalIdentityException {
         OidcIdentityProvider test = new OidcIdentityProvider("test");
-        Credentials credentials = new OidcAuthCredentials("userId", "test");
+        OidcAuthCredentials credentials = new OidcAuthCredentials("userId", "test");
+        credentials.setAttribute(TokenConstants.TOKEN_ATTRIBUTE, "token");
+        credentials.addGroup("group1");
         ExternalIdentity externalIdentity = test.authenticate(credentials);
+        ExternalIdentityRef group = externalIdentity.getDeclaredGroups().iterator().next();
+        assertEquals("group1", group.getId());
+        assertEquals("test", group.getProviderName());
+        assertEquals("token", externalIdentity.getProperties().get(TokenConstants.TOKEN_ATTRIBUTE));
+        assertEquals("test", externalIdentity.getExternalId().getProviderName());
+        assertEquals("userId", externalIdentity.getExternalId().getId());
+        assertEquals("userId", externalIdentity.getPrincipalName());
+        assertEquals("", externalIdentity.getIntermediatePath());
         assertTrue(externalIdentity instanceof ExternalUser);
     }
 
@@ -151,7 +162,7 @@ class OidcIdentityProviderTest {
     }
 
     @Test
-    void fromExternalIdentityRefFailure() throws ExternalIdentityException {
+    void fromExternalIdentityRefFailure()  {
         OidcGroupRef groupRef = mock(OidcGroupRef.class);
         when(groupRef.getProviderName()).thenReturn("test");
         when(groupRef.getId()).thenReturn("test");
