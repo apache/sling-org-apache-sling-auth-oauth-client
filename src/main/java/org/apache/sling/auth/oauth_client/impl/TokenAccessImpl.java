@@ -58,7 +58,6 @@ public class TokenAccessImpl implements OAuthTokenAccess {
             if (logger.isDebugEnabled()) {
                 logger.debug("Returning valid access token for connection {} and user {}", connection.name(), request.getUserPrincipal());
             }
-            // FIXME: token.getValue may return null -> NPE
             return new OAuthTokenResponse(Optional.of(token.getValue()), connection, request, redirectPath);
         }
         
@@ -66,10 +65,10 @@ public class TokenAccessImpl implements OAuthTokenAccess {
         if (token.getState() == TokenState.EXPIRED) {
             OAuthToken refreshToken = tokenStore.getRefreshToken(connection, resolver);
             if (refreshToken.getState() == TokenState.VALID) {
-                if (logger.isDebugEnabled())
+                if (logger.isDebugEnabled()) {
                     logger.debug("Refreshing expired access token for connection {} and user {}", connection.name(), request.getUserPrincipal());
+                }
 
-                // FIXME: refreshToken.getValue may return null -> NPE
                 OAuthTokens newTokens = tokenRefresher.refreshTokens(connection, refreshToken.getValue());
                 tokenStore.persistTokens(connection, resolver, newTokens);
                 

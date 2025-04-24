@@ -32,6 +32,14 @@ public class OAuthToken {
 
     public OAuthToken(@NotNull TokenState state, @Nullable String value) {
         this.state = state;
+        if (TokenState.VALID == state && value == null) {
+            throw new IllegalArgumentException("Token state is VALID but no token value is provided");
+        }
+        this.value = value;
+    }
+
+    public OAuthToken(@NotNull String value) {
+        this.state = TokenState.VALID;
         this.value = value;
     }
 
@@ -45,9 +53,12 @@ public class OAuthToken {
      * @return the value, in case the {@link #getState() state} is {@code OidcTokenState#VALID}.
      * @throws IllegalStateException in case the {@link #getState() state} is not {@code OidcTokenState#VALID}.
      */
-    public @Nullable String getValue() {
+    public @NotNull String getValue() {
         if (state != TokenState.VALID) {
             throw new IllegalStateException("Can't retrieve a token value when the token state is " + state);
+        }
+        if (value == null) {
+            throw new IllegalArgumentException("Token state is VALID but no token value is provided");
         }
         return value;
     }
