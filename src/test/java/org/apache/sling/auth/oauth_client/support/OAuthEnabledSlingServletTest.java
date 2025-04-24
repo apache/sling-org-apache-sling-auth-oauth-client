@@ -53,7 +53,7 @@ class OAuthEnabledSlingServletTest {
         tokenStore = (InMemoryOAuthTokenStore) context.registerService(OAuthTokenStore.class, new InMemoryOAuthTokenStore());
         context.registerService(OAuthTokenRefresher.class, new OAuthTokenRefresher() {
             @Override
-            public OAuthTokens refreshTokens(ClientConnection connection, String refreshToken) throws OAuthException {
+            public @NotNull OAuthTokens refreshTokens(@NotNull ClientConnection connection, @NotNull String refreshToken) throws OAuthException {
                 throw new UnsupportedOperationException("Not yet implemented");
             }
         });

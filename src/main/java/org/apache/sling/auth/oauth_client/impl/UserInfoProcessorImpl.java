@@ -22,6 +22,8 @@ import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 import net.minidev.json.JSONArray;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,27 +40,27 @@ public class UserInfoProcessorImpl implements UserInfoProcessor {
     Logger logger = LoggerFactory.getLogger(UserInfoProcessorImpl.class);
 
     @Override
-    public OidcAuthCredentials process(UserInfo userInfo, TokenResponse tokenResponse, String oidcSbject, String idp) {
+    public @NotNull OidcAuthCredentials process(@Nullable UserInfo userInfo, @NotNull TokenResponse tokenResponse, 
+                                                @NotNull String oidcSubject, @NotNull String idp) {
 
         OAuthTokens tokens = Converter.toSlingOAuthTokens(tokenResponse.toSuccessResponse().getTokens());
 
         // Create AuthenticationInfo object
-        OidcAuthCredentials credentials = new OidcAuthCredentials(oidcSbject, idp);
+        OidcAuthCredentials credentials = new OidcAuthCredentials(oidcSubject, idp);
         credentials.setAttribute(".token", "");
 
         if (userInfo != null) {
-            logger.debug("Prefered Username: " + userInfo.getPreferredUsername());
-            logger.debug("Subject: " + userInfo.getSubject());
-            logger.debug("Email: " + userInfo.getEmailAddress());
-            logger.debug("Name: " + userInfo.getGivenName());
-            logger.debug("FamilyName: " + userInfo.getFamilyName());
+            logger.debug("Preferred Username: {}", userInfo.getPreferredUsername());
+            logger.debug("Subject: {}", userInfo.getSubject());
+            logger.debug("Email: {}", userInfo.getEmailAddress());
+            logger.debug("Name: {}", userInfo.getGivenName());
+            logger.debug("FamilyName: {}", userInfo.getFamilyName());
 
             Object groups = userInfo.toJSONObject().remove("groups");
-            if (groups != null && groups instanceof JSONArray) {
-                logger.debug("Groups: " + groups.toString());
+            if (groups instanceof JSONArray groupJsonArray) {
+                logger.debug("Groups: {}", groups);
                 //Convert the groups in a Set of Strings
-                ((JSONArray) groups).forEach(group -> credentials.addGroup(group.toString()));
-
+                groupJsonArray.forEach(group -> credentials.addGroup(group.toString()));
             }
 
             // Set all the attributes in userInfo to the credentials
@@ -69,6 +71,7 @@ public class UserInfoProcessorImpl implements UserInfoProcessor {
             });
         }
         //Store the Access Token on user node
+        // FIXME: tokens.accessToken() may return null -> NPE
         credentials.setAttribute(JcrUserHomeOAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, tokens.accessToken());
         return credentials;
     }

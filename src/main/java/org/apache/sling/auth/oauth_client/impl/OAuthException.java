@@ -20,14 +20,6 @@ public class OAuthException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
-    public OAuthException() {
-        super();
-    }
-
-    public OAuthException(String message, Throwable cause) {
-        super(message, cause);
-    }
-
     public OAuthException(String message) {
         super(message);
     }

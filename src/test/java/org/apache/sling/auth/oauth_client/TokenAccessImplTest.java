@@ -26,13 +26,14 @@ import org.apache.sling.auth.oauth_client.impl.OAuthTokens;
 import org.apache.sling.auth.oauth_client.impl.TokenAccessImpl;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.apache.sling.testing.mock.sling.junit5.SlingContextExtension;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 @ExtendWith(SlingContextExtension.class)
 class TokenAccessImplTest {
     
-    private SlingContext slingContext = new SlingContext();
+    private final SlingContext slingContext = new SlingContext();
 
     @Test
     void missingAccessToken() {
@@ -83,18 +84,8 @@ class TokenAccessImplTest {
         OAuthTokens refreshedTokens = new OAuthTokens("access2", 0, null);
         
         OAuthTokenStore tokenStore = new InMemoryOAuthTokenStore();
-        
-        OAuthTokenRefresher tokenRefresher = new OAuthTokenRefresher() {
-            @Override
-            public OAuthTokens refreshTokens(ClientConnection connection, String refreshToken) {
-                if (!refreshToken.equals(expiredTokens.refreshToken()))
-                    throw new IllegalArgumentException("Invalid refresh token");
-                
-                return refreshedTokens;
-            }
-        };
 
-        TokenAccessImpl tokenAccess = new TokenAccessImpl(tokenStore, tokenRefresher);
+        TokenAccessImpl tokenAccess = getTokenAccess(expiredTokens, refreshedTokens, tokenStore);
 
         tokenStore.persistTokens(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver(), expiredTokens);
         
@@ -109,7 +100,21 @@ class TokenAccessImplTest {
                 assertThrows(IllegalStateException.class, tr::getRedirectUri, "getRedirectUri");
             });
     }
-    
+
+    private static @NotNull TokenAccessImpl getTokenAccess(OAuthTokens expiredTokens, OAuthTokens refreshedTokens, OAuthTokenStore tokenStore) {
+        OAuthTokenRefresher tokenRefresher = new OAuthTokenRefresher() {
+            @Override
+            public @NotNull OAuthTokens refreshTokens(@NotNull ClientConnection connection, @NotNull String refreshToken) {
+                if (!refreshToken.equals(expiredTokens.refreshToken())) {
+                    throw new IllegalArgumentException("Invalid refresh token");
+                }
+                return refreshedTokens;
+            }
+        };
+
+        return new TokenAccessImpl(tokenStore, tokenRefresher);
+    }
+
     @Test
     void clearAccessTokenWithResponse() {
         

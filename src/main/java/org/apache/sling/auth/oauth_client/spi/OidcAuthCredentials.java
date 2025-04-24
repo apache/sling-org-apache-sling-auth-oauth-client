@@ -74,8 +74,7 @@ public class OidcAuthCredentials implements Credentials {
         }
     }
     
-    @Nullable
-    public Object getAttribute(@NotNull String key) {
+    @Nullable public Object getAttribute(@NotNull String key) {
         return attributes.get(key);
     }
 

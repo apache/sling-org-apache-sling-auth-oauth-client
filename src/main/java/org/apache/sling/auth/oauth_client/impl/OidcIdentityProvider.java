@@ -127,7 +127,7 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
     }
     
     private boolean validCredentials(@NotNull Credentials credentials) {
-        return credentials instanceof OidcAuthCredentials && isSameIdp((OidcAuthCredentials) credentials);
+        return credentials instanceof OidcAuthCredentials oidcAuthCredentials && isSameIdp(oidcAuthCredentials);
     }
     
     private boolean isSameIdp(@NotNull OidcAuthCredentials credentials) {
@@ -192,7 +192,7 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
         }
 
         @Override
-        public ExternalIdentityRef getExternalId() {
+        public @NotNull ExternalIdentityRef getExternalId() {
             return new ExternalIdentityRef(creds.getUserId(), creds.getIdp());
         }
     }
@@ -218,7 +218,7 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
         }
     }
     
-    class OidcGroupRef extends ExternalIdentityRef {
+    static class OidcGroupRef extends ExternalIdentityRef {
         OidcGroupRef(@NotNull String id, @NotNull String idp) {
             super(id, idp);
         }

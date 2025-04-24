@@ -40,15 +40,14 @@ import com.nimbusds.oauth2.sdk.token.Tokens;
 public class OAuthTokenRefresherImpl implements OAuthTokenRefresher {
 
     @Override
-    public @NotNull OAuthTokens refreshTokens(@NotNull ClientConnection connection, @NotNull String refreshToken2) {
-        return Converter.toSlingOAuthTokens(refreshTokensInternal(connection, refreshToken2));
+    public @NotNull OAuthTokens refreshTokens(@NotNull ClientConnection connection, @NotNull String refreshToken) {
+        return Converter.toSlingOAuthTokens(refreshTokensInternal(connection, refreshToken));
     }
     
-    public @NotNull Tokens refreshTokensInternal(@NotNull ClientConnection connection, @NotNull String refreshToken2) {
-
+    private static @NotNull Tokens refreshTokensInternal(@NotNull ClientConnection connection, @NotNull String refreshTokenString) throws OAuthException {
          try {
             // Construct the grant from the saved refresh token
-             RefreshToken refreshToken = new RefreshToken(refreshToken2);
+             RefreshToken refreshToken = new RefreshToken(refreshTokenString);
              AuthorizationGrant refreshTokenGrant = new RefreshTokenGrant(refreshToken);
              
              ResolvedOAuthConnection conn = ResolvedOAuthConnection.resolve(connection);
@@ -76,7 +75,7 @@ public class OAuthTokenRefresherImpl implements OAuthTokenRefresher {
             
              // Get the access token, the refresh token may be updated
              return successResponse.getTokens();
-        } catch (ParseException |IOException e) {
+        } catch (ParseException | IOException e) {
             throw new OAuthException(e);
         }
     }

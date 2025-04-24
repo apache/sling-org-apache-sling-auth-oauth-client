@@ -186,13 +186,12 @@ class TokenStore {
      *
      * @param authData The authentication data to split in three parts
      * @return A string array with three elements being the three parts of the
-     *         cookie value or <code>null</code> if the input is
-     *         <code>null</code> or if the string does not contain (at least)
+     *         cookie value or an empty array if the string input does not contain (at least)
      *         three '@' separated parts.
      */
-    static @NotNull String[] split(final String authData) {
+    static @NotNull String[] split(@NotNull final String authData) {
         String[] parts = authData.split("@");
-        if (parts != null && parts.length == 3) {
+        if (parts.length == 3) {
             return parts;
         }
         return EMPTY_ARRAY;
@@ -202,7 +201,6 @@ class TokenStore {
      * Returns <code>true</code> if the <code>value</code> is a valid secure
      * token as follows:
      * <ul>
-     * <li>The string is not <code>null</code></li>
      * <li>The string contains three fields separated by an @ sign</li>
      * <li>The expiry time encoded in the second field has not yet passed</li>
      * <li>The hashing the third field, the expiry time and token number with
@@ -212,50 +210,43 @@ class TokenStore {
      * <p>
      * Otherwise the method returns <code>false</code>.
      */
-    boolean isValid(String value) {
+    boolean isValid(@NotNull String value) {
         String[] parts = split(value);
-        if (parts.length == 3) {
-
-            // single digit token number
-            int tokenNumber = parts[1].charAt(0) - '0';
-            if (tokenNumber >= 0 && tokenNumber < currentTokens.length()) {
-
-                long cookieTime = Long.parseLong(parts[1].substring(1));
-                if (System.currentTimeMillis() < cookieTime) {
-
-                    try {
-                        SecretKey secretKey = currentTokens.get(tokenNumber);
-                        if ( secretKey == null ) {
-                            log.error("AuthNCookie value '{}' points to an unknown token number", value);
-                            return false;
-                        }
-                        String hmac = encode(cookieTime, parts[2], tokenNumber,
-                            secretKey);
-                        return value.equals(hmac);
-                    } catch (ArrayIndexOutOfBoundsException | InvalidKeyException | IllegalStateException |
-                             NoSuchAlgorithmException e) {
-                        log.error(e.getMessage(), e);
-                    }
-
-                    log.error("AuthNCookie value '{}' is invalid", value);
-
-                } else {
-                    log.error("AuthNCookie value '{}' has expired {}ms ago",
-                        value, (System.currentTimeMillis() - cookieTime));
-                }
-
-            } else {
-                log.error(
-                    "AuthNCookie value '{}' is invalid: refers to an invalid token number {}",
-                    value, tokenNumber);
-            }
-
-        } else {
+        if (parts.length != 3) {
             log.error("AuthNCookie value '{}' has invalid format", value);
+            return false;
         }
 
-        // failed verification, reason is logged
+        // single digit token number
+        int tokenNumber = parts[1].charAt(0) - '0';
+        if (tokenNumber < 0 || tokenNumber >= currentTokens.length()) {
+            log.error("AuthNCookie value '{}' is invalid: refers to an invalid token number {}", value, tokenNumber);
+            return false;
+        }
+
+        long cookieTime = Long.parseLong(parts[1].substring(1));
+        if (isExpired(cookieTime)) {
+            log.error("AuthNCookie value '{}' has expired {}ms ago", value, (System.currentTimeMillis() - cookieTime));
+            return false;
+        }
+        
+        try {
+            SecretKey secretKey = currentTokens.get(tokenNumber);
+            if ( secretKey == null ) {
+                log.error("AuthNCookie value '{}' points to an unknown token number", value);
+                return false;
+            }
+            String hmac = encode(cookieTime, parts[2], tokenNumber, secretKey);
+            return value.equals(hmac);
+        } catch (ArrayIndexOutOfBoundsException | InvalidKeyException | IllegalStateException | NoSuchAlgorithmException e) {
+            log.error(e.getMessage(), e);
+        }
+        log.error("AuthNCookie value '{}' is invalid", value);
         return false;
+    }
+    
+    private static boolean isExpired(long cookieTime) {
+        return System.currentTimeMillis() >= cookieTime;
     }
 
     /**
@@ -352,10 +343,7 @@ class TokenStore {
                 currentTokens = newKeys;
 
             } catch (IOException e) {
-
                 log.error("Failed to load cookie keys {}", e.getMessage());
-
-
             }
         }
 

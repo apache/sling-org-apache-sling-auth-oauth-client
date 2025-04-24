@@ -23,6 +23,8 @@ import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -49,10 +51,10 @@ import java.security.NoSuchAlgorithmException;
 )
 public class SlingLoginCookieManager implements LoginCookieManager {
 
-    private static final Logger log = LoggerFactory.getLogger(OidcAuthenticationHandler.class);
+    private static final Logger log = LoggerFactory.getLogger(SlingLoginCookieManager.class);
     private TokenStore tokenStore;
-    long sessionTimeout;
-    String cookieName;
+    private long sessionTimeout;
+    private String cookieName;
 
     @ObjectClassDefinition(
             name = "Apache Sling Token Update Configuration for OIDC Authentication Handler",
@@ -90,7 +92,8 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         this.cookieName = config.cookieName();
     }
     @Override
-    public void setLoginCookie(HttpServletRequest request, HttpServletResponse response, SlingRepository repository, Credentials creds) {
+    public void setLoginCookie(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, 
+                               @NotNull SlingRepository repository, @NotNull Credentials creds) {
 
         long expires = System.currentTimeMillis() + this.sessionTimeout;
 
@@ -98,34 +101,32 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         String authData = null;
         try {
             authData = tokenStore.encode(expires, ((OidcAuthCredentials)creds).getUserId());
-        } catch (NoSuchAlgorithmException e) {
+        } catch (NoSuchAlgorithmException|InvalidKeyException e) {
             throw new RuntimeException(e);
-        } catch (InvalidKeyException e) {
-            throw new RuntimeException(e);
-        }
+        } 
         String cookieValue = Base64.encodeBase64URLSafeString(authData.getBytes(StandardCharsets.UTF_8));
         setCookie(request, response, cookieName, cookieValue, (int) (sessionTimeout / 1000));
     }
 
     @Override
-    public AuthenticationInfo verifyLoginCookie(HttpServletRequest request) {
+    @Nullable public AuthenticationInfo verifyLoginCookie(@NotNull HttpServletRequest request) {
         Cookie cookie = getLoginCookie(request);
         if (cookie == null) {
             return null;
         }
         String cookieValue = cookie.getValue();
-        if (cookieValue.length() == 0) {
+        if (cookieValue.isEmpty()) {
             return null;
         }
         String decodedCookieValue = new String(Base64.decodeBase64(cookieValue), StandardCharsets.UTF_8);
-        if (tokenStore.isValid(new String(Base64.decodeBase64(cookieValue), StandardCharsets.UTF_8))) {
+        if (tokenStore.isValid(decodedCookieValue)) {
             return createAuthInfo(decodedCookieValue);
         }
         return null;
     }
 
     @Override
-    public Cookie getLoginCookie(HttpServletRequest request) {
+    public @Nullable Cookie getLoginCookie(@NotNull HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
             return null;
@@ -138,7 +139,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         return null;
     }
 
-    private AuthenticationInfo createAuthInfo(final String authData) {
+    private @Nullable AuthenticationInfo createAuthInfo(@NotNull final String authData) {
         final String userId = getUserId(authData);
         if (userId == null) {
             return null;
@@ -153,18 +154,16 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         return authInfo;
     }
 
-    String getUserId(final String authData) {
-        if (authData != null) {
-            String[] parts = TokenStore.split(authData);
-            if (parts.length == 3) {
-                return parts[2];
-            }
+    @Nullable String getUserId(@NotNull final String authData) {
+        String[] parts = TokenStore.split(authData);
+        if (parts.length == 3) {
+            return parts[2];
         }
         return null;
     }
 
-    private void setCookie(final HttpServletRequest request, final HttpServletResponse response, final String name,
-                           final String value, final int maxAge) {
+    private static void setCookie(@NotNull final HttpServletRequest request, @NotNull final HttpServletResponse response, 
+                           @NotNull final String name, @NotNull final String value, final int maxAge) {
         // set the cookie
         final StringBuilder cookie = new StringBuilder(name);
         cookie.append('=');
@@ -194,7 +193,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
      *            The BundleContext to use to make an relative file absolute
      * @return The absolute file
      */
-    File getTokenFile(final String tokenFileName, final BundleContext bundleContext) {
+    private static @NotNull File getTokenFile(@NotNull final String tokenFileName, @NotNull final BundleContext bundleContext) {
         File tokenFile = new File(tokenFileName);
         if (tokenFile.isAbsolute()) {
             return tokenFile;

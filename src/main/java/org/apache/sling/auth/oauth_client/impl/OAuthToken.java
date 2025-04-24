@@ -46,8 +46,9 @@ public class OAuthToken {
      * @throws IllegalStateException in case the {@link #getState() state} is not {@code OidcTokenState#VALID}.
      */
     public @Nullable String getValue() {
-        if ( state != TokenState.VALID )
-            throw new IllegalStateException("Can't retrieve a token value when the token state is "  + state);
+        if (state != TokenState.VALID) {
+            throw new IllegalStateException("Can't retrieve a token value when the token state is " + state);
+        }
         return value;
     }
 }

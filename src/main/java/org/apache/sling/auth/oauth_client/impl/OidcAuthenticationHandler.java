@@ -56,7 +56,6 @@ import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -101,19 +100,19 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private final Map<String, ClientConnection> connections;
     private final OAuthStateManager stateManager;
 
-    private String idp;
+    private final String idp;
 
     private  final String callbackUri;
 
-    private LoginCookieManager loginCookieManager;
+    private final LoginCookieManager loginCookieManager;
 
-    private String defaultRedirect;
+    private final String defaultRedirect;
 
-    private String defaultConnectionName;
+    private final String defaultConnectionName;
 
-    private UserInfoProcessor userInfoProcessor;
+    private final UserInfoProcessor userInfoProcessor;
 
-    private boolean userInfoEnabled;
+    private final boolean userInfoEnabled;
 
     // We don't want leave the cookie lying around for a long time because it it not needed.
     // At the same time, some OAuth user authentication flows take a long time due to
@@ -186,7 +185,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
 
     @Override
-    public AuthenticationInfo extractCredentials(@Nullable HttpServletRequest request, @Nullable HttpServletResponse response) {
+    public AuthenticationInfo extractCredentials(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response) {
         logger.debug("inside extractCredentials");
 
         // Check if the request is authenticated by a oidc login token
@@ -210,7 +209,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             authResponse = AuthorizationResponse.parse(new URI(requestURL.toString()));
 
             clientState = stateManager.toOAuthState(authResponse.getState());
-            if ( !clientState.isPresent() )  {
+            if (!clientState.isPresent())  {
                 // Do not return null to indicate that the handler cannot extract credentials
                 throw new IllegalStateException("No state found in authorization response");
             }
@@ -221,7 +220,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
 
             Cookie[] cookies = request.getCookies();
-            if ( cookies == null ) {
+            if (cookies == null) {
                 throw new IllegalStateException("Failed state check: No cookies found");
             }
             // iterate over the cookie and get the one with name OAuthStateManager.COOKIE_NAME_REQUEST_KEY
@@ -231,7 +230,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                     break;
                 }
             }
-            if ( stateCookie == null ) {
+            if (stateCookie == null) {
                 throw new IllegalStateException(String.format("Failed state check: No request cookie named %s found", OAuthStateManager.COOKIE_NAME_REQUEST_KEY));
             }
 
@@ -287,7 +286,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             // extract id token from the response
             tokenResponse = OIDCTokenResponseParser.parse(httpResponse);
 
-            if ( !tokenResponse.indicatesSuccess() ) {
+            if (!tokenResponse.indicatesSuccess()) {
                 logger.debug("Token error. Received code: {}, message: {}", tokenResponse.toErrorResponse().getErrorObject().getCode(), tokenResponse.toErrorResponse().getErrorObject().getDescription());
                 throw  new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse()));
             }
@@ -366,7 +365,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
      * @throws BadJOSEException If the ID token is invalid.
      * @throws JOSEException     If there is an error during validation.
      */
-    private IDTokenClaimsSet validateIdToken(TokenResponse tokenResponse, ResolvedOidcConnection conn) throws BadJOSEException, JOSEException, MalformedURLException {
+    private static @NotNull IDTokenClaimsSet validateIdToken(@NotNull TokenResponse tokenResponse, 
+                                                             @NotNull ResolvedOidcConnection conn) throws BadJOSEException, JOSEException, MalformedURLException {
         Issuer issuer = new Issuer(conn.issuer());
         ClientID clientID = new ClientID(conn.clientId());
         JWSAlgorithm jwsAlg = JWSAlgorithm.RS256; //TODO: Read from config
@@ -376,7 +376,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         return validator.validate(tokenResponse.toSuccessResponse().getTokens().toOIDCTokens().getIDToken(), null);
     }
 
-    private static String toErrorMessage(String context, ErrorResponse error) {
+    private static @NotNull String toErrorMessage(@NotNull String context, @NotNull ErrorResponse error) {
 
         ErrorObject errorObject = error.getErrorObject();
         StringBuilder message = new StringBuilder();
@@ -395,7 +395,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     }
 
     @Override
-    public boolean requestCredentials(HttpServletRequest request, HttpServletResponse response) {
+    public boolean requestCredentials(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response) {
         logger.debug("inside requestCredentials");
         String desiredConnectionName = request.getParameter("c");
         if ( desiredConnectionName == null ) {
@@ -420,7 +420,9 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         }
     }
 
-    private OAuthEntryPointServlet.RedirectTarget getAuthenticationRequestUri(ClientConnection connection, HttpServletRequest request, URI redirectUri) {
+    private @NotNull OAuthEntryPointServlet.RedirectTarget getAuthenticationRequestUri(@NotNull ClientConnection connection, 
+                                                                                       @NotNull HttpServletRequest request, 
+                                                                                       @NotNull URI redirectUri) {
 
         ResolvedOidcConnection conn = ResolvedOidcConnection.resolve(connection);
 
@@ -480,20 +482,19 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         }
 
         Object creds = authInfo.get(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS);
-        if (creds instanceof OidcAuthCredentials) {
-            OidcAuthCredentials sc = (OidcAuthCredentials) creds;
-            Object tokenValueObject = sc.getAttribute(".token");
+        if (creds instanceof OidcAuthCredentials oidcAuthCredentials) {
+            Object tokenValueObject = oidcAuthCredentials.getAttribute(".token");
             if (tokenValueObject != null && !tokenValueObject.toString().isEmpty()) {
                 String token = tokenValueObject.toString();
                 if (!token.isEmpty()) {
                     logger.debug("Calling TokenUpdate service to update token cookie");
-                    loginCookieManager.setLoginCookie(request, response, repository, sc);
+                    loginCookieManager.setLoginCookie(request, response, repository, oidcAuthCredentials);
                 }
             }
 
             try {
                 Object redirect = request.getAttribute(REDIRECT_ATTRIBUTE_NAME);
-                if ( redirect != null && redirect instanceof String ) {
+                if (redirect instanceof String) {
                     response.sendRedirect(redirect.toString());
                 } else {
                     response.sendRedirect(defaultRedirect);

@@ -18,6 +18,8 @@ package org.apache.sling.auth.oauth_client.spi;
 
 import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.jcr.api.SlingRepository;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.jcr.Credentials;
 import javax.servlet.http.Cookie;
@@ -36,19 +38,20 @@ public interface LoginCookieManager {
      * @param repository
      * @param creds
      */
-    void setLoginCookie(HttpServletRequest request, HttpServletResponse response, SlingRepository repository, Credentials creds);
+    void setLoginCookie(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, 
+                        @NotNull SlingRepository repository, @NotNull Credentials creds);
 
     /**
      * Verify the login cookie in the request. If the Authentication Handler do not verify the cookie, return null.
      * @param request
      * @return AuthenticationInfo
      */
-    AuthenticationInfo verifyLoginCookie(HttpServletRequest request);
+    @Nullable AuthenticationInfo verifyLoginCookie(@NotNull HttpServletRequest request);
 
     /**
      * Get the login cookie from the request. If the Authentication Handler do not verify the cookie, return null.
      * @param request
      * @return Cookie
      */
-    Cookie getLoginCookie(HttpServletRequest request);
+    @Nullable Cookie getLoginCookie(@NotNull HttpServletRequest request);
 }

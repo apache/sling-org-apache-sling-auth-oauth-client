@@ -40,9 +40,10 @@ public class OAuthTokenResponse {
     private final Optional<String> token;
     private final ClientConnection connection;
     private final SlingHttpServletRequest request;
-    private String redirectPath;
+    private final String redirectPath;
     
-    public OAuthTokenResponse(Optional<String> token, ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
+    public OAuthTokenResponse(@NotNull Optional<String> token, @NotNull ClientConnection connection, 
+                              @NotNull SlingHttpServletRequest request, @NotNull String redirectPath) {
         this.token = token;
         this.connection = connection;
         this.request = request;
@@ -60,12 +61,12 @@ public class OAuthTokenResponse {
     
     
     /**
-     * Returns the a valid access token value and throws an {@link IllegalStateException} otherwise
+     * Returns a valid access token value and throws an {@link IllegalStateException} otherwise
      * 
      * @return a valid access token value
      * @throws IllegalStateException if no access token is present
      */
-    public String getTokenValue() {
+    public @NotNull String getTokenValue() {
         return token.orElseThrow(() -> new IllegalStateException("No access token present."));
     }
     
@@ -75,9 +76,10 @@ public class OAuthTokenResponse {
      * @return the URI to redirect the user to
      * @throws IllegalStateException if an access token is present
      */
-    public URI getRedirectUri() {
-        if ( token.isPresent() )
+    public @NotNull URI getRedirectUri() {
+        if (token.isPresent()) {
             throw new IllegalStateException("Access token is present, will not generate a new redirect URI.");
+        }
         
         return OAuthUris.getOAuthEntryPointUri(connection, request, redirectPath);
     }

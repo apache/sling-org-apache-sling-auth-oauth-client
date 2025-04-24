@@ -59,7 +59,7 @@ public abstract class OAuthEnabledSlingServlet extends SlingAllMethodsServlet {
 
     private final OAuthTokenAccess tokenAccess;
 	
-    protected OAuthEnabledSlingServlet(ClientConnection connection, OAuthTokenAccess tokenAccess) {
+    protected OAuthEnabledSlingServlet(@NotNull ClientConnection connection, @NotNull OAuthTokenAccess tokenAccess) {
         this.connection = Objects.requireNonNull(connection, "connection may not null");
         this.tokenAccess = Objects.requireNonNull(tokenAccess, "tokenAccess may not null");
     }

@@ -18,7 +18,6 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import static org.osgi.service.component.annotations.ReferencePolicyOption.GREEDY;
 
-import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
@@ -118,8 +117,7 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
     }
 
     @Override
-    protected void doGet(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
-            throws ServletException, IOException {
+    protected void doGet(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response) throws ServletException {
 
         StringBuffer requestURL = request.getRequestURL();
         if ( request.getQueryString() != null )
@@ -132,14 +130,14 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
             authResponse = AuthorizationResponse.parse(new URI(requestURL.toString()));
             
             clientState = stateManager.toOAuthState(authResponse.getState());
-            if ( !clientState.isPresent() )  {
+            if (!clientState.isPresent())  {
                 logger.debug("Failed state check: no state found in authorization response");
                 response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 return;
             }
             
             stateCookie = request.getCookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
-            if ( stateCookie == null ) {
+            if (stateCookie == null) {
                 logger.debug("Failed state check: No request cookie named '{}' found", OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
                 response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 return;
@@ -154,10 +152,10 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
         try {            
             String stateFromAuthServer = clientState.get().perRequestKey();
             String stateFromClient = stateCookie.getValue();
-            if ( ! stateFromAuthServer.equals(stateFromClient) )
+            if (!stateFromAuthServer.equals(stateFromClient)) {
                 throw new IllegalStateException("Failed state check: request keys from client and server are not the same");
-
-            if ( !authResponse.indicatesSuccess() ) {
+            }
+            if (!authResponse.indicatesSuccess()) {
                 AuthorizationErrorResponse errorResponse = authResponse.toErrorResponse();
                 throw new OAuthCallbackException("Authentication failed", new RuntimeException(toErrorMessage("Error in authentication response", errorResponse)));
             }
@@ -167,13 +165,13 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
             String authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
             
             String desiredConnectionName = clientState.get().connectionName();
-            if ( desiredConnectionName.isEmpty() )
+            if (desiredConnectionName.isEmpty()) {
                 throw new IllegalArgumentException("No connection found in clientState");
-            
+            }
             ClientConnection connection = connections.get(desiredConnectionName);
-            if ( connection == null )
+            if (connection == null) {
                 throw new IllegalArgumentException(String.format("Requested unknown connection '%s'", desiredConnectionName));
-            
+            }
             ResolvedOAuthConnection conn = ResolvedOAuthConnection.resolve(connection);
 
             ClientID clientId = new ClientID(conn.clientId());
@@ -183,7 +181,6 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
             AuthorizationCode code = new AuthorizationCode(authCode);
             
             URI tokenEndpoint = new URI(conn.tokenEndpoint());
-            
             TokenRequest tokenRequest = new TokenRequest.Builder(
                 tokenEndpoint,
                 clientCredentials,
@@ -199,14 +196,14 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
             
             TokenResponse tokenResponse = TokenResponse.parse(httpResponse);
             
-            if ( !tokenResponse.indicatesSuccess() )
+            if (!tokenResponse.indicatesSuccess()) {
                 throw new OAuthCallbackException("Token exchange error", new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse())));
-
+            }
             OAuthTokens tokens = Converter.toSlingOAuthTokens(tokenResponse.toSuccessResponse().getTokens());
             
             tokenStore.persistTokens(connection, request.getResourceResolver(), tokens);
 
-            if ( redirect.isEmpty() ) {
+            if (redirect.isEmpty()) {
                 response.setStatus(HttpServletResponse.SC_NO_CONTENT);
             } else {
                 response.sendRedirect(URLDecoder.decode(redirect.get(), StandardCharsets.UTF_8));

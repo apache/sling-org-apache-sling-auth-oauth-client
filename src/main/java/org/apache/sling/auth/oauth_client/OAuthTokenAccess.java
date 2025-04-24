@@ -42,7 +42,8 @@ public interface OAuthTokenAccess {
      * @param redirectPath the path to redirect to after completing the OAuth flow
      * @return the token response
      */
-    OAuthTokenResponse getAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath);
+    @NotNull OAuthTokenResponse getAccessToken(@NotNull ClientConnection connection, @NotNull SlingHttpServletRequest request, 
+                                               @NotNull String redirectPath);
 
     /**
      * Clears the access token for the given connection and user, as identified by the request.
@@ -54,7 +55,8 @@ public interface OAuthTokenAccess {
      * @param redirectPath the path to redirect to after completing the OAuth flow 
      * @return the token response
      */
-    OAuthTokenResponse clearAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath);
+    @NotNull OAuthTokenResponse clearAccessToken(@NotNull ClientConnection connection, @NotNull SlingHttpServletRequest request, 
+                                                 @NotNull String redirectPath);
 
     /**
      * Clears the access token for the given connection and user, as identified by the resource resolver
@@ -65,6 +67,6 @@ public interface OAuthTokenAccess {
      * @param connection the client connection to clear the token for
      * @param resolver used to determine the current user for which to retrieve the token
      */
-    void clearAccessToken(ClientConnection connection, ResourceResolver resolver);
+    void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver);
 
 }

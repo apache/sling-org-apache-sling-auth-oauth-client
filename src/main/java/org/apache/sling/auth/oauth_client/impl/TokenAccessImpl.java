@@ -23,6 +23,7 @@ import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.OAuthTokenAccess;
 import org.apache.sling.auth.oauth_client.OAuthTokenResponse;
+import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -34,8 +35,8 @@ public class TokenAccessImpl implements OAuthTokenAccess {
     
     private final Logger logger = LoggerFactory.getLogger(getClass());
     
-    private OAuthTokenStore tokenStore;
-    private OAuthTokenRefresher tokenRefresher;
+    private final OAuthTokenStore tokenStore;
+    private final OAuthTokenRefresher tokenRefresher;
     
     @Activate
     public TokenAccessImpl(@Reference OAuthTokenStore tokenStore, @Reference OAuthTokenRefresher tokenRefresher) {
@@ -44,20 +45,20 @@ public class TokenAccessImpl implements OAuthTokenAccess {
     }
     
     @Override
-    public OAuthTokenResponse getAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
+    public @NotNull OAuthTokenResponse getAccessToken(@NotNull ClientConnection connection, @NotNull SlingHttpServletRequest request, @NotNull String redirectPath) {
         
         ResourceResolver resolver = request.getResourceResolver();
-        
         OAuthToken token = tokenStore.getAccessToken(connection, resolver);
         
-        if ( logger.isDebugEnabled() )
+        if (logger.isDebugEnabled()) {
             logger.debug("Accessing token for connection {} and user {}", connection.name(), request.getUserPrincipal());
-        
+        }
         // valid access token present -> return token
         if (token.getState() == TokenState.VALID) {
-            if (logger.isDebugEnabled())
+            if (logger.isDebugEnabled()) {
                 logger.debug("Returning valid access token for connection {} and user {}", connection.name(), request.getUserPrincipal());
-            
+            }
+            // FIXME: token.getValue may return null -> NPE
             return new OAuthTokenResponse(Optional.of(token.getValue()), connection, request, redirectPath);
         }
         
@@ -68,36 +69,36 @@ public class TokenAccessImpl implements OAuthTokenAccess {
                 if (logger.isDebugEnabled())
                     logger.debug("Refreshing expired access token for connection {} and user {}", connection.name(), request.getUserPrincipal());
 
+                // FIXME: refreshToken.getValue may return null -> NPE
                 OAuthTokens newTokens = tokenRefresher.refreshTokens(connection, refreshToken.getValue());
                 tokenStore.persistTokens(connection, resolver, newTokens);
+                
+                // FIXME: newTokens.accessToken() may return null -> NPE
                 return new OAuthTokenResponse(Optional.of(newTokens.accessToken()), connection, request, redirectPath);
             }
         }
 
         // all other scenarios -> redirect
-        if ( logger.isDebugEnabled() )
+        if (logger.isDebugEnabled()) {
             logger.debug("No valid access token found for connection {} and user {}", connection.name(), request.getUserPrincipal());
-        
+        }
         return new OAuthTokenResponse(Optional.empty(), connection, request, redirectPath);
     }
     
     @Override
-    public OAuthTokenResponse clearAccessToken(ClientConnection connection, SlingHttpServletRequest request, String redirectPath) {
-        
-        if ( logger.isDebugEnabled() )
+    public @NotNull OAuthTokenResponse clearAccessToken(@NotNull ClientConnection connection, @NotNull SlingHttpServletRequest request, @NotNull String redirectPath) {
+        if (logger.isDebugEnabled()) {
             logger.debug("Clearing access token for connection {} and user {}", connection.name(), request.getUserPrincipal());
-
+        }
         tokenStore.clearAccessToken(connection, request.getResourceResolver());
-        
         return new OAuthTokenResponse(Optional.empty(), connection, request, redirectPath);
     }
     
     @Override
-    public void clearAccessToken(ClientConnection connection, ResourceResolver resolver) {
-
-        if ( logger.isDebugEnabled() )
+    public void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) {
+        if (logger.isDebugEnabled()) {
             logger.debug("Clearing access token for connection {} and user {}", connection.name(), resolver.getUserID());
-
+        }
         tokenStore.clearAccessToken(connection, resolver);
     }
 }
