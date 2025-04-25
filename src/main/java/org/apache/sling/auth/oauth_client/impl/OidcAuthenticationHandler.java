@@ -201,39 +201,14 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         if ( request.getQueryString() != null )
             requestURL.append('?').append(request.getQueryString());
 
-        AuthorizationResponse authResponse;
         Optional<OAuthState> clientState; //state returned by the idp in the redirect request
         String authCode; //authorization code returned by the idp in the redirect request
-        Cookie stateCookie = null;
+        Cookie stateCookie;
         try {
-            authResponse = AuthorizationResponse.parse(new URI(requestURL.toString()));
-
-            clientState = stateManager.toOAuthState(authResponse.getState());
-            if (!clientState.isPresent())  {
-                // Do not return null to indicate that the handler cannot extract credentials
-                throw new IllegalStateException("No state found in authorization response");
-            }
-
-            if (authResponse.toSuccessResponse().getAuthorizationCode() == null) {
-                throw new IllegalStateException("No authorization code found in authorization response");
-            }
-            authCode = authResponse.toSuccessResponse().getAuthorizationCode().getValue();
-
-            Cookie[] cookies = request.getCookies();
-            if (cookies == null) {
-                throw new IllegalStateException("Failed state check: No cookies found");
-            }
-            // iterate over the cookie and get the one with name OAuthStateManager.COOKIE_NAME_REQUEST_KEY
-            for (Cookie cookie : cookies) {
-                if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
-                    stateCookie = cookie;
-                    break;
-                }
-            }
-            if (stateCookie == null) {
-                throw new IllegalStateException(String.format("Failed state check: No request cookie named %s found", OAuthStateManager.COOKIE_NAME_REQUEST_KEY));
-            }
-
+            AuthorizationResponse authResponse = AuthorizationResponse.parse(new URI(requestURL.toString()));
+            clientState = extractClientState(authResponse);
+            authCode = extractAuthCode(authResponse);
+            stateCookie = extractStateCookie(request);
         } catch (ParseException | URISyntaxException e) {
             logger.debug("Failed to parse authorization response");
             return null;
@@ -262,53 +237,9 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         ClientSecretBasic clientCredentials = new ClientSecretBasic(clientId, clientSecret);
 
         // Exchange the authorization code for an access token, id token and possibly refresh token
-        AuthorizationCode code = new AuthorizationCode(authCode);
-
-        URI tokenEndpoint;
-        TokenRequest tokenRequest;
-        HTTPResponse httpResponse;
-        TokenResponse tokenResponse;
-        IDTokenClaimsSet claims;
-        try {
-            tokenEndpoint = new URI(conn.tokenEndpoint());
-            tokenRequest = new TokenRequest.Builder(
-                    tokenEndpoint,
-                    clientCredentials,
-                    new AuthorizationCodeGrant(code, new URI(callbackUri))
-            ).build();
-
-            HTTPRequest httpRequest = tokenRequest.toHTTPRequest();
-            // GitHub requires an explicitly set Accept header, otherwise the response is url encoded
-            // https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#2-users-are-redirected-back-to-your-site-by-github
-            // see also https://bitbucket.org/connect2id/oauth-2.0-sdk-with-openid-connect-extensions/issues/107/support-application-x-www-form-urlencoded
-            httpRequest.setAccept("application/json");
-            httpResponse = httpRequest.send();
-
-            // extract id token from the response
-            tokenResponse = OIDCTokenResponseParser.parse(httpResponse);
-
-            if (!tokenResponse.indicatesSuccess()) {
-                logger.debug("Token error. Received code: {}, message: {}", tokenResponse.toErrorResponse().getErrorObject().getCode(), tokenResponse.toErrorResponse().getErrorObject().getDescription());
-                throw  new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse()));
-            }
-            tokenResponse = tokenResponse.toSuccessResponse();
-
-            claims = validateIdToken(tokenResponse, conn);
-
-        } catch (URISyntaxException e) {
-            logger.error("Token Endpoint is not a valid URI: {} Error: {}", conn.tokenEndpoint(), e.getMessage());
-            throw new RuntimeException(String.format("Token Endpoint is not a valid URI: %s", conn.tokenEndpoint()));
-        } catch (IOException e) {
-            logger.error("Failed to exchange authorization code for access token: {}", e.getMessage(), e);
-            throw new RuntimeException(e);
-        } catch (ParseException e) {
-            logger.error("Failed to parse token response: {}", e.getMessage(), e);
-            throw new RuntimeException(e.getMessage());
-        } catch (BadJOSEException | JOSEException e) {
-            logger.error("Failed to validate token: {}", e.getMessage(), e);
-            throw new RuntimeException(e.getMessage());
-        }
-
+        TokenResponse tokenResponse = extractTokenResponse(authCode, conn, clientCredentials, callbackUri);
+        IDTokenClaimsSet claims = validateIdToken(tokenResponse, conn);
+        
         // Make the request to userInfo
         String subject = claims.getSubject().getValue();
         OidcAuthCredentials credentials = extractCredentials((OidcConnectionImpl) connection, subject, tokenResponse);
@@ -350,10 +281,78 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             return userInfoProcessor.process(null, tokenResponse, subject, idp);
         }
     }
+    
+    private @NotNull Optional<OAuthState> extractClientState(@NotNull AuthorizationResponse authResponse) {
+        Optional<OAuthState> clientState = stateManager.toOAuthState(authResponse.getState());
+        if (!clientState.isPresent())  {
+            // Do not return null to indicate that the handler cannot extract credentials
+            throw new IllegalStateException("No state found in authorization response");
+        }
+        return clientState;
+    }
+    
+    private static @NotNull String extractAuthCode(@NotNull AuthorizationResponse authResponse) {
+        AuthorizationCode authCode = authResponse.toSuccessResponse().getAuthorizationCode();
+        if (authCode == null) {
+            throw new IllegalStateException("No authorization code found in authorization response");
+        }
+        return authCode.getValue();
+    }
+    
+    private static @NotNull TokenResponse extractTokenResponse(@NotNull String authCode, @NotNull ResolvedOidcConnection conn, 
+                                                               @NotNull ClientSecretBasic clientCredentials, 
+                                                               @NotNull String callbackUri) {
+        try {
+            URI tokenEndpoint = new URI(conn.tokenEndpoint());
+            TokenRequest tokenRequest = new TokenRequest.Builder(
+                    tokenEndpoint,
+                    clientCredentials,
+                    new AuthorizationCodeGrant(new AuthorizationCode(authCode), new URI(callbackUri))
+            ).build();
+
+            HTTPRequest httpRequest = tokenRequest.toHTTPRequest();
+            // GitHub requires an explicitly set Accept header, otherwise the response is url encoded
+            // https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#2-users-are-redirected-back-to-your-site-by-github
+            // see also https://bitbucket.org/connect2id/oauth-2.0-sdk-with-openid-connect-extensions/issues/107/support-application-x-www-form-urlencoded
+            httpRequest.setAccept("application/json");
+            HTTPResponse httpResponse = httpRequest.send();
+
+            // extract id token from the response
+            TokenResponse tokenResponse = OIDCTokenResponseParser.parse(httpResponse);
+
+            if (!tokenResponse.indicatesSuccess()) {
+                logger.debug("Token error. Received code: {}, message: {}", tokenResponse.toErrorResponse().getErrorObject().getCode(), tokenResponse.toErrorResponse().getErrorObject().getDescription());
+                throw  new RuntimeException(toErrorMessage("Error in token response", tokenResponse.toErrorResponse()));
+            }
+            return tokenResponse.toSuccessResponse();
+        } catch (URISyntaxException e) {
+            logger.error("Token Endpoint is not a valid URI: {} Error: {}", conn.tokenEndpoint(), e.getMessage());
+            throw new RuntimeException(String.format("Token Endpoint is not a valid URI: %s", conn.tokenEndpoint()));
+        } catch (IOException e) {
+            logger.error("Failed to exchange authorization code for access token: {}", e.getMessage(), e);
+            throw new RuntimeException(e);
+        } catch (ParseException e) {
+            logger.error("Failed to parse token response: {}", e.getMessage(), e);
+            throw new RuntimeException(e.getMessage());
+        }
+
+    }
+    private static @NotNull Cookie extractStateCookie(@NotNull HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            throw new IllegalStateException("Failed state check: No cookies found");
+        }
+        for (Cookie cookie : cookies) {
+            if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+                return cookie;
+            }
+        }
+        throw new IllegalStateException(String.format("Failed state check: No request cookie named %s found", OAuthStateManager.COOKIE_NAME_REQUEST_KEY));
+    }
 
     /**
      * Validates the ID token received from the OpenID provider.
-     * According to this cocumentation: https://connect2id.com/blog/how-to-validate-an-openid-connect-id-token
+     * According to this documentation: https://connect2id.com/blog/how-to-validate-an-openid-connect-id-token
      * it perform following validations:
      * <ul>
      *  <li> Checks if the ID token JWS algorithm matches the expected one.</li>
@@ -366,18 +365,21 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
      * @param tokenResponse The token response containing the ID token.
      * @param conn         The resolved OIDC connection.
      * @return The validated ID token claims set.
-     * @throws BadJOSEException If the ID token is invalid.
-     * @throws JOSEException     If there is an error during validation.
      */
     private static @NotNull IDTokenClaimsSet validateIdToken(@NotNull TokenResponse tokenResponse, 
-                                                             @NotNull ResolvedOidcConnection conn) throws BadJOSEException, JOSEException, MalformedURLException {
+                                                             @NotNull ResolvedOidcConnection conn) {
         Issuer issuer = new Issuer(conn.issuer());
         ClientID clientID = new ClientID(conn.clientId());
-        JWSAlgorithm jwsAlg = JWSAlgorithm.RS256; //TODO: Read from config
-        URL jwkSetURL = conn.jwkSetURL().toURL();
+        try {
+            JWSAlgorithm jwsAlg = JWSAlgorithm.RS256; //TODO: Read from config
+            URL jwkSetURL = conn.jwkSetURL().toURL();
 
-        IDTokenValidator validator = new IDTokenValidator(issuer, clientID, jwsAlg, jwkSetURL);
-        return validator.validate(tokenResponse.toSuccessResponse().getTokens().toOIDCTokens().getIDToken(), null);
+            IDTokenValidator validator = new IDTokenValidator(issuer, clientID, jwsAlg, jwkSetURL);
+            return validator.validate(tokenResponse.toSuccessResponse().getTokens().toOIDCTokens().getIDToken(), null);
+        } catch (BadJOSEException | JOSEException | MalformedURLException e) {
+            logger.error("Failed to validate token: {}", e.getMessage(), e);
+            throw new RuntimeException(e.getMessage());
+        }
     }
 
     private static @NotNull String toErrorMessage(@NotNull String context, @NotNull ErrorResponse error) {
