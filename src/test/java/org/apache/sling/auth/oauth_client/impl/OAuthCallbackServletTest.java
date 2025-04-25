@@ -50,8 +50,6 @@ class OAuthCallbackServletTest {
 
     private final SlingContext context = new SlingContext();
     
-    private List<ClientConnection> connections;
-
     private HttpServer tokenEndpointServer;
 
     private InMemoryOAuthTokenStore tokenStore;
@@ -66,7 +64,7 @@ class OAuthCallbackServletTest {
         
         int bindPort = tokenEndpointServer.getAddress().getPort();
 
-        connections = new ArrayList<>(Arrays.asList(
+        List<ClientConnection> connections = new ArrayList<>(Arrays.asList(
                 MockOidcConnection.DEFAULT_CONNECTION,
                 new MockOidcConnection(new String[] {"openid"}, MOCK_OIDC_PARAM, "client-id", "client-secret", "http://example.com", new String[] { "access_type=offline" } ),
                 new MockOidcConnection(new String[] {"openid"},"mock-oidc-local", "client-id", "client-secret", "http://localhost:" + bindPort, new String[0])
@@ -123,9 +121,7 @@ class OAuthCallbackServletTest {
         context.request().setQueryString(format("code=foo&state=%s", state));
         context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, "baz"));
         
-        OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> {
-            servlet.service(context.request(), context.response());
-        });
+        OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
         assertThat(thrown).hasMessage("State check failed");
     }
     
@@ -137,14 +133,12 @@ class OAuthCallbackServletTest {
         context.request().setQueryString(format("error=access_denied&state=%s", state));
         context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, "bar"));
         
-        OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> {
-            servlet.service(context.request(), context.response());
-        });
+        OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
         assertThat(thrown).hasMessage("Authentication failed");
     }
 
     @Test
-    void unreachableTokenEndpoint() throws IOException, ServletException {
+    void unreachableTokenEndpoint() {
         
         // the token endpoint has no handler configured, will result in a 404
 
@@ -153,9 +147,7 @@ class OAuthCallbackServletTest {
         context.request().setQueryString(format("code=foo&state=%s", state));
         context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, "bar"));
         
-        OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> {
-            servlet.service(context.request(), context.response());
-        });
+        OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
         
         assertThat(thrown)
             .hasMessage("Token exchange error")
@@ -179,9 +171,7 @@ class OAuthCallbackServletTest {
         context.request().setQueryString(format("code=foo&state=%s", state));
         context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, "bar"));
         
-        OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> {
-            servlet.service(context.request(), context.response());
-        });
+        OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
         
         assertThat(thrown)
             .hasMessage("Token exchange error")
@@ -194,8 +184,7 @@ class OAuthCallbackServletTest {
 
         successfulExecution("bar|mock-oidc-local");
 
-        assertThat(context.response().getStatus()).as("response code")
-            .isEqualTo(HttpServletResponse.SC_NO_CONTENT);
+        assertThat(context.response().getStatus()).as("response code").isEqualTo(HttpServletResponse.SC_NO_CONTENT);
     }
 
     private void successfulExecution(String stateValue) throws IOException, ServletException {

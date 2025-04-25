@@ -26,6 +26,7 @@ import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.junit.jupiter.api.Test;
 
 import javax.jcr.Credentials;
+import javax.jcr.SimpleCredentials;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -77,14 +78,14 @@ class OidcIdentityProviderTest {
     @Test
     void setAttributesValidCredentials() {
         OidcIdentityProvider test = new OidcIdentityProvider("test");
-        Credentials credentials = new OidcAuthCredentials("userId", "test");
+        OidcAuthCredentials credentials = new OidcAuthCredentials("userId", "test");
 
         HashMap<String, String> map = new HashMap<>();
         map.put("a", "b");
         map.put("c", "d");
 
         assertTrue(test.setAttributes(credentials, map));
-        assertEquals("b", ((OidcAuthCredentials) credentials).getAttribute("a"));
+        assertEquals("b", credentials.getAttribute("a"));
     }
 
     @Test
@@ -112,6 +113,8 @@ class OidcIdentityProviderTest {
 
         OidcIdentityProvider test = new OidcIdentityProvider("test");
         ExternalIdentity externalIdentity = test.getIdentity(groupRef);
+        assertNotNull(externalIdentity);
+        
         assertEquals(Collections.emptyList(), externalIdentity.getDeclaredGroups());
         assertEquals(Collections.emptyMap(), externalIdentity.getProperties());
     }
@@ -132,6 +135,8 @@ class OidcIdentityProviderTest {
         credentials.setAttribute(TokenConstants.TOKEN_ATTRIBUTE, "token");
         credentials.addGroup("group1");
         ExternalIdentity externalIdentity = test.authenticate(credentials);
+        assertNotNull(externalIdentity);
+        
         ExternalIdentityRef group = externalIdentity.getDeclaredGroups().iterator().next();
         assertEquals("group1", group.getId());
         assertEquals("test", group.getProviderName());
@@ -140,7 +145,7 @@ class OidcIdentityProviderTest {
         assertEquals("userId", externalIdentity.getExternalId().getId());
         assertEquals("userId", externalIdentity.getPrincipalName());
         assertEquals("", externalIdentity.getIntermediatePath());
-        assertTrue(externalIdentity instanceof ExternalUser);
+        assertInstanceOf(ExternalUser.class, externalIdentity);
     }
 
     @Test
@@ -148,6 +153,12 @@ class OidcIdentityProviderTest {
         OidcIdentityProvider test = new OidcIdentityProvider("test");
         Credentials credentials = new OidcAuthCredentials("userId", "wrong-idp");
         assertNull(test.authenticate(credentials));
+    }
+    
+    @Test
+    void authenticateUnsupportedCredentials() {
+        OidcIdentityProvider test = new OidcIdentityProvider("test");
+        assertNull(test.authenticate(new SimpleCredentials("userId", "password".toCharArray())));
     }
 
     @Test
@@ -169,43 +180,32 @@ class OidcIdentityProviderTest {
         when(groupRef.getString()).thenReturn("test");
 
         OidcIdentityProvider test = new OidcIdentityProvider("wrong-idp");
-        ExternalIdentityException exception = assertThrows(ExternalIdentityException.class, () -> {
-            test.fromExternalIdentityRef(groupRef);
-        });
+        ExternalIdentityException exception = assertThrows(ExternalIdentityException.class, () -> test.fromExternalIdentityRef(groupRef));
         assertEquals("Foreign IDP test", exception.getMessage());
-    }
-
-
-    @Test
-    void unsupportedMethods() {
-        OidcIdentityProvider test = new OidcIdentityProvider("test");
-        assertThrows(UnsupportedOperationException.class, () -> test.getUser("userId"));
-        assertThrows(UnsupportedOperationException.class, () -> test.getGroup("groupId"));
-        assertThrows(UnsupportedOperationException.class, () -> test.listUsers());
-        assertThrows(UnsupportedOperationException.class, () -> test.listGroups());
     }
 
     @Test
     void getUser() {
-    }
-
-    @Test
-    void authenticate() {
+        OidcIdentityProvider test = new OidcIdentityProvider("test");
+        assertThrows(UnsupportedOperationException.class, () -> test.getUser("userId"));
     }
 
     @Test
     void getGroup() {
+        OidcIdentityProvider test = new OidcIdentityProvider("test");
+        assertThrows(UnsupportedOperationException.class, () -> test.getGroup("groupId"));
+
     }
 
     @Test
     void listUsers() {
+        OidcIdentityProvider test = new OidcIdentityProvider("test");
+        assertThrows(UnsupportedOperationException.class, test::listUsers);
     }
 
     @Test
     void listGroups() {
-    }
-
-    @Test
-    void fromExternalIdentityRef() {
+        OidcIdentityProvider test = new OidcIdentityProvider("test");
+        assertThrows(UnsupportedOperationException.class, test::listGroups);
     }
 }

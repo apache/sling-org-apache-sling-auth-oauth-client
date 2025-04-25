@@ -44,7 +44,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 @ExtendWith(SlingContextExtension.class)
 class OAuthEnabledSlingServletTest {
 
-    private SlingContext context = new SlingContext();
+    private final SlingContext context = new SlingContext();
     private TokenAccessImpl tokenAccess;
     private InMemoryOAuthTokenStore tokenStore;
     

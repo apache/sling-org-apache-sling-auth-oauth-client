@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 
 import javax.servlet.Servlet;
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.sling.api.SlingHttpServletRequest;
@@ -72,8 +71,7 @@ public class DecryptOAuthTokenServlet extends SlingAllMethodsServlet {
     }
 
     @Override
-    protected void doPost(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
-            throws ServletException, IOException {
+    protected void doPost(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response) throws IOException {
         String token = request.getParameter("token");
         if (token == null) {
             response.sendError(400, "Missing 'token' parameter");

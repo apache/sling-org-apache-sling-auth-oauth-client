@@ -16,7 +16,6 @@
  */
 package org.apache.sling.auth.oauth_client;
 
-import static java.lang.String.format;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
@@ -92,7 +91,7 @@ class AuthorizationCodeFlowIT {
 
     private int keycloakPort;
 
-    private List<String> configPidsToCleanup = new ArrayList<>();
+    private final List<String> configPidsToCleanup = new ArrayList<>();
     private int slingPort;
 
     @BeforeAll
@@ -212,12 +211,12 @@ class AuthorizationCodeFlowIT {
         String oauthRequestKey = oauthCookie.get().getValue();
         
         // load login form from keycloak
-        HttpClient keycloak = HttpClient.newHttpClient();        
+        HttpClient httpClient = HttpClient.newHttpClient();        
         HttpRequest renderLoginFormRequest = HttpRequest.newBuilder().uri(URI.create(locationHeaderValue)).build();
-        HttpResponse<Stream<String>> renderLoginFormResponse = keycloak.send(renderLoginFormRequest, BodyHandlers.ofLines());
+        HttpResponse<Stream<String>> renderLoginFormResponse = httpClient.send(renderLoginFormRequest, BodyHandlers.ofLines());
         List<String> matchingFormLines = renderLoginFormResponse.body()
             .filter( line -> line.contains("id=\"kc-form-login\""))
-            .collect(Collectors.toList());
+            .toList();
         assertThat(matchingFormLines).as("lines matching form id").singleElement();
         String formLine = matchingFormLines.get(0);
         int actionAttrStart = formLine.indexOf("action=\"") + "action=\"".length();
@@ -235,9 +234,9 @@ class AuthorizationCodeFlowIT {
         HttpRequest.Builder authenticateRequest = HttpRequest.newBuilder(URI.create(actionAttr))
                 .POST(BodyPublishers.ofString(requestBody))
                 .header("content-type", "application/x-www-form-urlencoded");
-        authFormRequestCookies.stream().forEach( cookie -> authenticateRequest.header("cookie", cookie));
+        authFormRequestCookies.forEach(cookie -> authenticateRequest.header("cookie", cookie));
         
-        HttpResponse<String> authenticateResponse = keycloak.send(authenticateRequest.build(), BodyHandlers.ofString());
+        HttpResponse<String> authenticateResponse = httpClient.send(authenticateRequest.build(), BodyHandlers.ofString());
         System.out.println(authenticateResponse.body());
         Optional<String> authResponseLocationHeader = authenticateResponse.headers().firstValue("location");
         assertThat(authResponseLocationHeader).as("Authentication response header").isPresent();
@@ -249,7 +248,7 @@ class AuthorizationCodeFlowIT {
                 var parts = s.split("=");
                 return (NameValuePair) new BasicNameValuePair(parts[0], URLDecoder.decode(parts[1], StandardCharsets.UTF_8));
             })
-            .collect(Collectors.toList());
+            .toList();
         
         List<Header> headers = new ArrayList<>();
         headers.add(new BasicHeader("Cookie", "sling.oauth-request-key=" + oauthRequestKey));
@@ -264,7 +263,7 @@ class AuthorizationCodeFlowIT {
                 new BasicNameValuePair("cryptoServiceName", "sling-oauth")
         ));
         
-        System.err.println(format("Decrypting %s ...", accesToken));
+        System.err.printf("Decrypting %s ...%n", accesToken);
         
         String decryptedToken = sling.doPost("/system/sling/decrypt",  postBody, 200).getContent();
         // validate that the JWT is valid; we trust what keycloak has returned but just want to ensure that
@@ -408,12 +407,12 @@ class AuthorizationCodeFlowIT {
         String oauthRequestKey = oauthCookie.get().getValue();
 
         // load login form from keycloak
-        HttpClient keycloak = HttpClient.newHttpClient();
+        HttpClient httpClient = HttpClient.newHttpClient();
         HttpRequest renderLoginFormRequest = HttpRequest.newBuilder().uri(URI.create(locationHeaderValue)).build();
-        HttpResponse<Stream<String>> renderLoginFormResponse = keycloak.send(renderLoginFormRequest, BodyHandlers.ofLines());
+        HttpResponse<Stream<String>> renderLoginFormResponse = httpClient.send(renderLoginFormRequest, BodyHandlers.ofLines());
         List<String> matchingFormLines = renderLoginFormResponse.body()
                 .filter( line -> line.contains("id=\"kc-form-login\""))
-                .collect(Collectors.toList());
+                .toList();
         assertThat(matchingFormLines).as("lines matching form id").singleElement();
         String formLine = matchingFormLines.get(0);
         int actionAttrStart = formLine.indexOf("action=\"") + "action=\"".length();
@@ -432,9 +431,9 @@ class AuthorizationCodeFlowIT {
         HttpRequest.Builder authenticateRequest = HttpRequest.newBuilder(URI.create(actionAttr))
                 .POST(BodyPublishers.ofString(requestBody))
                 .header("content-type", "application/x-www-form-urlencoded");
-        authFormRequestCookies.stream().forEach( cookie -> authenticateRequest.header("cookie", cookie));
+        authFormRequestCookies.forEach(cookie -> authenticateRequest.header("cookie", cookie));
 
-        HttpResponse<String> authenticateResponse = keycloak.send(authenticateRequest.build(), BodyHandlers.ofString());
+        HttpResponse<String> authenticateResponse = httpClient.send(authenticateRequest.build(), BodyHandlers.ofString());
         System.out.println(authenticateResponse.body());
 
         // Assert response from keycloak
@@ -448,7 +447,7 @@ class AuthorizationCodeFlowIT {
                     var parts = s.split("=");
                     return (NameValuePair) new BasicNameValuePair(parts[0], URLDecoder.decode(parts[1], StandardCharsets.UTF_8));
                 })
-                .collect(Collectors.toList());
+                .toList();
 
         List<Header> headers = new ArrayList<>();
         headers.add(new BasicHeader("Cookie", "sling.oauth-request-key=" + oauthRequestKey));

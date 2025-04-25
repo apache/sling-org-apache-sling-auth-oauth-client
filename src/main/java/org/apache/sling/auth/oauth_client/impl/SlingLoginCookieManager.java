@@ -52,9 +52,10 @@ import java.security.NoSuchAlgorithmException;
 public class SlingLoginCookieManager implements LoginCookieManager {
 
     private static final Logger log = LoggerFactory.getLogger(SlingLoginCookieManager.class);
-    private TokenStore tokenStore;
-    private long sessionTimeout;
-    private String cookieName;
+
+    private final TokenStore tokenStore;
+    private final long sessionTimeout;
+    private final String cookieName;
 
     @ObjectClassDefinition(
             name = "Apache Sling Token Update Configuration for OIDC Authentication Handler",
@@ -87,10 +88,11 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         final boolean fastSeed = config.form_token_fastseed();
         log.info("Storing tokens in {}", tokenFile.getAbsolutePath());
 
-        this.tokenStore = new TokenStore(tokenFile, sessionTimeout, fastSeed);
         this.sessionTimeout = config.sessionTimeout();
         this.cookieName = config.cookieName();
+        this.tokenStore = new TokenStore(tokenFile, sessionTimeout, fastSeed);
     }
+    
     @Override
     public void setLoginCookie(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, 
                                @NotNull SlingRepository repository, @NotNull Credentials creds) {
@@ -154,7 +156,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         return authInfo;
     }
 
-    @Nullable String getUserId(@NotNull final String authData) {
+    private @Nullable String getUserId(@NotNull final String authData) {
         String[] parts = TokenStore.split(authData);
         if (parts.length == 3) {
             return parts[2];

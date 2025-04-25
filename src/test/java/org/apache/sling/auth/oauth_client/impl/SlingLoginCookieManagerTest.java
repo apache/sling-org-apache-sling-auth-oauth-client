@@ -42,10 +42,10 @@ import static org.mockito.Mockito.when;
 
 class SlingLoginCookieManagerTest {
 
-    MockRequest request = new MockRequest();
-    MockResponse response = new MockResponse();
-    SlingRepository repository = mock(SlingRepository.class);
-    SlingLoginCookieManager slingLoginCookieManager;
+    private MockRequest request = new MockRequest();
+    private MockResponse response = new MockResponse();
+    private SlingRepository repository = mock(SlingRepository.class);
+    private SlingLoginCookieManager slingLoginCookieManager;
 
     @BeforeEach
     void setup() throws IOException, NoSuchAlgorithmException, InvalidKeyException {
@@ -61,11 +61,10 @@ class SlingLoginCookieManagerTest {
 
         BundleContext bundleContext = mock(BundleContext.class);
         when(bundleContext.getDataFile("cookie-tokens")).thenReturn(tempFile);
-
-
+        
         slingLoginCookieManager = new SlingLoginCookieManager(config, bundleContext);
-
     }
+    
     @Test
     void setGetVerifyLoginCookie() {
         OidcAuthCredentials creds = mock(OidcAuthCredentials.class);
