@@ -90,10 +90,15 @@ import java.util.stream.Collectors;
 @Designate(ocd = OidcAuthenticationHandler.Config.class, factory = true)
 public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHandler implements AuthenticationHandler {
 
+    public static final String REDIRECT_ATTRIBUTE_NAME = "sling.redirect";
 
     private static final Logger logger = LoggerFactory.getLogger(OidcAuthenticationHandler.class);
     private static final String AUTH_TYPE = "oidc";
-    public static final String REDIRECT_ATTRIBUTE_NAME = "sling.redirect";
+
+    // We don't want leave the cookie lying around for a long time because it is not needed.
+    // At the same time, some OAuth user authentication flows take a long time due to
+    // consent, account selection, 2FA, etc. so we cannot make this too short.
+    private static final int COOKIE_MAX_AGE_SECONDS = 300;
 
     private final SlingRepository repository;
 
@@ -113,11 +118,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private final UserInfoProcessor userInfoProcessor;
 
     private final boolean userInfoEnabled;
-
-    // We don't want leave the cookie lying around for a long time because it it not needed.
-    // At the same time, some OAuth user authentication flows take a long time due to
-    // consent, account selection, 2FA, etc so we cannot make this too short.
-    protected static final int COOKIE_MAX_AGE_SECONDS = 300;
 
     @ObjectClassDefinition(
             name = "Apache Sling Oidc Authentication Handler",
