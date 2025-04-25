@@ -26,12 +26,14 @@ import javax.jcr.PropertyType;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
 import javax.jcr.Value;
+import javax.jcr.ValueFactory;
 
 import org.apache.jackrabbit.api.security.user.User;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.jetbrains.annotations.NotNull;
 import org.apache.sling.commons.crypto.CryptoService;
+import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -60,9 +62,9 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
         try {
             User user = adaptToUser(resolver);
             Value[] expiresAt = user.getProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT));
-            if ( expiresAt != null  && expiresAt.length == 1 && expiresAt[0].getType() == PropertyType.DATE ) {
+            if (expiresAt != null && expiresAt.length == 1 && expiresAt[0].getType() == PropertyType.DATE) {
                 Calendar expiresCal = expiresAt[0].getDate();
-                if ( expiresCal.before(Calendar.getInstance())) {
+                if (expiresCal.before(Calendar.getInstance())) {
                     logger.info("Token for {} expired at {}, marking as expired", connection.name(), expiresCal);
 
                     // refresh token is present, mark as expired
@@ -105,26 +107,21 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
         try {
             User user = adaptToUser(resolver);
             Session session = adaptToSession(resolver);
+            ValueFactory vf = session.getValueFactory();
 
+            setTokenProperty(user, vf, propertyPath(connection, PROPERTY_NAME_ACCESS_TOKEN), tokens.accessToken());
+            setTokenProperty(user, vf, propertyPath(connection, PROPERTY_NAME_REFRESH_TOKEN), tokens.refreshToken());
+            
             ZonedDateTime expiry = null;
             long expiresAt = tokens.expiresAt();
             if (expiresAt > 0) {
                 expiry = ZonedDateTime.now().plusSeconds(expiresAt);
             }
-
-            user.setProperty(propertyPath(connection, PROPERTY_NAME_ACCESS_TOKEN), createTokenValue(session, tokens.accessToken()));
             if (expiry != null) {
                 Calendar cal = GregorianCalendar.from(expiry);
-                user.setProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT), session.getValueFactory().createValue(cal));
+                user.setProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT), vf.createValue(cal));
             } else {
                 user.removeProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT));
-            }
-
-            String refreshToken = tokens.refreshToken();
-            if (refreshToken != null) {
-                user.setProperty(propertyPath(connection, PROPERTY_NAME_REFRESH_TOKEN), createTokenValue(session, refreshToken));
-            } else {
-                user.removeProperty(propertyPath(connection, PROPERTY_NAME_REFRESH_TOKEN));
             }
 
             session.save();
@@ -140,6 +137,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
 
             currentUser.removeProperty(propertyPath(connection, PROPERTY_NAME_ACCESS_TOKEN));
             currentUser.removeProperty(propertyPath(connection, PROPERTY_NAME_EXPIRES_AT));
+            // TODO: need to remove refresh token as well?
 
             adaptToSession(resolver).save();
         } catch (RepositoryException e) {
@@ -147,9 +145,19 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
         }
     }
     
-    private @NotNull Value createTokenValue(@NotNull Session session, @NotNull String propertyValue) throws RepositoryException {
+    private void setTokenProperty(@NotNull User user, @NotNull ValueFactory valueFactory, @NotNull String propertyPath, @Nullable String value) throws RepositoryException {
+        if (value != null) {
+            user.setProperty(propertyPath, createTokenValue(valueFactory, value));
+        } else {
+            // TODO: verify if removing the property is the intended behavior in case of null accessToken
+            logger.info("Token value is null, removing property {}", propertyPath);
+            user.removeProperty(propertyPath);
+        }
+    }
+    
+    private @NotNull Value createTokenValue(@NotNull ValueFactory valueFactory, @NotNull String propertyValue) {
         String encryptedValue = cryptoService.encrypt(propertyValue);
-        return session.getValueFactory().createValue(encryptedValue);
+        return valueFactory.createValue(encryptedValue);
     }
 
     private static @NotNull String propertyPath(@NotNull ClientConnection connection, @NotNull String propertyName) {

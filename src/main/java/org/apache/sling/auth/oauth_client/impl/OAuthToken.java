@@ -50,8 +50,9 @@ public class OAuthToken {
     /**
      * Returns the token value
      * 
-     * @return the value, in case the {@link #getState() state} is {@code OidcTokenState#VALID}.
-     * @throws IllegalStateException in case the {@link #getState() state} is not {@code OidcTokenState#VALID}.
+     * @return the value, in case the {@link #getState() state} is {@code OidcTokenState#VALID} and the value is not {@code null}.
+     * @throws IllegalStateException in case the {@link #getState() state} is not {@code OidcTokenState#VALID} or if the 
+     * value is {@code null}.
      */
     public @NotNull String getValue() {
         if (state != TokenState.VALID) {
