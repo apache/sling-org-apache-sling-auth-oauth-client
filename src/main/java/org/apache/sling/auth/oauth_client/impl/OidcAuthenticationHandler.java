@@ -241,8 +241,9 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         String stateFromAuthServer = clientState.get().perRequestKey();
         String stateFromClient = stateCookie.getValue();
-        if ( ! stateFromAuthServer.equals(stateFromClient) )
+        if (!stateFromAuthServer.equals(stateFromClient)) {
             throw new IllegalStateException("Failed state check: request keys from client and server are not the same");
+        }
 
         // 2. The state cookie is valid, we can exchange an authorization code for an access token
         Optional<String> redirect = Optional.ofNullable(clientState.get().redirect());
@@ -251,9 +252,9 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         String desiredConnectionName = clientState.get().connectionName();
         ClientConnection connection = connections.get(desiredConnectionName);
-        if ( connection == null )
+        if (connection == null) {
             throw new IllegalArgumentException(String.format("Requested unknown connection '%s'", desiredConnectionName));
-
+        }
         ResolvedOidcConnection conn = ResolvedOidcConnection.resolve(connection);
 
         ClientID clientId = new ClientID(conn.clientId());
@@ -310,12 +311,22 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         // Make the request to userInfo
         String subject = claims.getSubject().getValue();
-        OidcAuthCredentials credentials;
+        OidcAuthCredentials credentials = extractCredentials((OidcConnectionImpl) connection, subject, tokenResponse);
+        
+        //create authInfo
+        authInfo = new AuthenticationInfo(AUTH_TYPE, subject);
+        authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
+
+        logger.info("User {} authenticated", subject);
+        return authInfo;
+    }
+    
+    private @NotNull OidcAuthCredentials extractCredentials(@NotNull OidcConnectionImpl connection, @NotNull String subject, @NotNull TokenResponse tokenResponse) {
         if (userInfoEnabled) {
             HTTPResponse httpResponseUserInfo;
             UserInfoResponse userInfoResponse;
             try {
-                httpResponseUserInfo = new UserInfoRequest(new URI(((OidcConnectionImpl) connection).userInfoUrl()), tokenResponse.toSuccessResponse().getTokens().getAccessToken())
+                httpResponseUserInfo = new UserInfoRequest(new URI(connection.userInfoUrl()), tokenResponse.toSuccessResponse().getTokens().getAccessToken())
                         .toHTTPRequest()
                         .send();
                 userInfoResponse = UserInfoResponse.parse(httpResponseUserInfo);
@@ -323,28 +334,21 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                     // The request failed, e.g. due to invalid or expired token
                     logger.debug("UserInfo error. Received code: {}, message: {}", userInfoResponse.toErrorResponse().getErrorObject().getCode(), userInfoResponse.toErrorResponse().getErrorObject().getDescription());
                     throw  new RuntimeException(toErrorMessage("Error in userinfo response", userInfoResponse.toErrorResponse()));
-
                 }
 
                 // Extract the claims
                 UserInfo userInfo = userInfoResponse.toSuccessResponse().getUserInfo();
 
                 //process credentials
-                credentials = userInfoProcessor.process(userInfo, tokenResponse, subject, idp);
+                return userInfoProcessor.process(userInfo, tokenResponse, subject, idp);
 
             } catch (IOException | URISyntaxException | ParseException e) {
                 logger.error("Error while processing UserInfo: {}", e.getMessage(), e);
                 throw new RuntimeException(e);
             }
         } else {
-            credentials = userInfoProcessor.process(null, tokenResponse, subject, idp);
+            return userInfoProcessor.process(null, tokenResponse, subject, idp);
         }
-        //create authInfo
-        authInfo = new AuthenticationInfo(AUTH_TYPE, subject);
-        authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
-
-        logger.info("User {} authenticated", subject);
-        return authInfo;
     }
 
     /**
