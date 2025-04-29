@@ -59,7 +59,7 @@ public class OAuthToken {
             throw new IllegalStateException("Can't retrieve a token value when the token state is " + state);
         }
         if (value == null) {
-            throw new IllegalArgumentException("Token state is VALID but no token value is provided");
+            throw new IllegalStateException("Token state is VALID but no token value is provided");
         }
         return value;
     }

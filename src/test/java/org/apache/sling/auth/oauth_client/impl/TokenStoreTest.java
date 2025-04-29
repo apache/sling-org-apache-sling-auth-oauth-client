@@ -39,11 +39,12 @@ import static org.junit.Assert.assertTrue;
 
 /* TokenStore tests, taken from org.apache.sling.auth.form */
  public class TokenStoreTest {
-    private TokenStore store;
     private static final long SESSION_TIMEOUT_MSEC = 60 * 1000L;
     private static final long DEFAULT_EXPIRATION_TIME_MSEC = System.currentTimeMillis() + SESSION_TIMEOUT_MSEC / 2;
     private static final boolean DEFAULT_FAST_SEED = false;
     private static final String USER_ID = "user_" + UUID.randomUUID();
+
+    private TokenStore store;
     private String encodedToken;
     private File tokenFile;
     private int additionalFileIndex;
@@ -68,6 +69,7 @@ import static org.junit.Assert.assertTrue;
     public void invalidTokensTest() {
         final String [] invalid = {
             "1@21@3",
+            "1@-@3",
             "nothing",
             "0@bad@token"
         };
@@ -105,7 +107,7 @@ import static org.junit.Assert.assertTrue;
             new TokenStore(additionalTokenFile(), SESSION_TIMEOUT_MSEC, false)
         };
 
-        for(TokenStore testStore : testStores) {
+        for (TokenStore testStore : testStores) {
             String lastHexNumber = "";
             for(int i=1 ; i < 100; i++) {
                 final String uniqueUserId = "user-" + i;
@@ -124,10 +126,5 @@ import static org.junit.Assert.assertTrue;
                 assertEquals(uniqueUserId, parts[2]);
             }
         }
-    }
-
-    @Test(expected = NullPointerException.class)
-    public void nullTokenFileTest() throws InvalidKeyException, NoSuchAlgorithmException, IllegalStateException {
-        new TokenStore(null, SESSION_TIMEOUT_MSEC, DEFAULT_FAST_SEED);
     }
 }

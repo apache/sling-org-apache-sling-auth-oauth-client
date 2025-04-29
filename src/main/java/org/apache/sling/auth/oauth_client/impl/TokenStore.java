@@ -30,7 +30,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -98,29 +97,21 @@ class TokenStore {
     /**
      * A secure random used for generating new tokens.
      */
-    private SecureRandom random;
+    private final SecureRandom random;
 
     /** The token file to persist the secure tokens */
-    private File tokenFile;
+    private final File tokenFile;
 
     /** A temporary file used to update the secure token file */
-    private File tmpTokenFile;
+    private final File tmpTokenFile;
 
     /**
      * @throws NoSuchAlgorithmException
      * @throws InvalidKeyException
-     * @throws UnsupportedEncodingException
      * @throws IllegalStateException
-     * @throws NullPointerException if <code>tokenFile</code> is
-     *             <code>null</code>.
      */
-    TokenStore(final File tokenFile, final long sessionTimeout,
-               final boolean fastSeed) throws NoSuchAlgorithmException,
-            InvalidKeyException, IllegalStateException {
-
-        if (tokenFile == null) {
-            throw new NullPointerException("tokenfile");
-        }
+    TokenStore(@NotNull final File tokenFile, final long sessionTimeout,
+               final boolean fastSeed) throws NoSuchAlgorithmException, InvalidKeyException, IllegalStateException {
 
         this.random = SecureRandom.getInstance(SHA1PRNG);
         this.ttl = sessionTimeout;
@@ -154,24 +145,22 @@ class TokenStore {
      * @param expires
      * @param userId
      * @return
-     * @throws UnsupportedEncodingException
      * @throws IllegalStateException
      * @throws NoSuchAlgorithmException
      * @throws InvalidKeyException
      */
-    String encode(final long expires, final String userId)
-            throws IllegalStateException,
-            NoSuchAlgorithmException, InvalidKeyException {
+    @NotNull String encode(final long expires, final @NotNull String userId)
+            throws IllegalStateException, NoSuchAlgorithmException, InvalidKeyException {
         int token = getActiveToken();
         SecretKey key = currentTokens.get(token);
         return encode(expires, userId, token, key);
     }
 
-    private String encode(final long expires, final String userId,
-            final int token, final SecretKey key) throws IllegalStateException,
+    private static @NotNull String encode(final long expires, final @NotNull String userId,
+                                          final int token, final @NotNull SecretKey key) throws IllegalStateException,
             NoSuchAlgorithmException, InvalidKeyException {
 
-        String cookiePayload = String.valueOf(token) + String.valueOf(expires)
+        String cookiePayload = token + String.valueOf(expires)
             + "@" + userId;
         Mac m = Mac.getInstance(HMAC_SHA256);
         m.init(key);
@@ -208,7 +197,7 @@ class TokenStore {
      * contained in the first field</li>
      * </ul>
      * <p>
-     * Otherwise the method returns <code>false</code>.
+     * Otherwise, the method returns <code>false</code>.
      */
     boolean isValid(@NotNull String value) {
         String[] parts = split(value);
@@ -326,7 +315,7 @@ class TokenStore {
                         int l = keyInputStream.readInt();
                         byte[] b = new byte[l];
                         int offset = 0;
-                        int bytesRead = -1;
+                        int bytesRead;
                         do {
                             bytesRead = keyInputStream.read(b, offset, b.length - offset);
                             offset += bytesRead;
@@ -361,7 +350,7 @@ class TokenStore {
      * @param base
      * @return
      */
-    private String byteToHex(byte[] base) {
+    private static String byteToHex(byte[] base) {
         char[] c = new char[base.length * 2];
         int i = 0;
 
