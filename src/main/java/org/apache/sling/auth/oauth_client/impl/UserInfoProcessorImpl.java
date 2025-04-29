@@ -71,8 +71,12 @@ public class UserInfoProcessorImpl implements UserInfoProcessor {
             });
         }
         //Store the Access Token on user node
-        // FIXME: tokens.accessToken() may return null -> NPE
-        credentials.setAttribute(JcrUserHomeOAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, tokens.accessToken());
+        String accessToken = tokens.accessToken();
+        if (accessToken != null) {
+            credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, tokens.accessToken());
+        } else {
+            logger.debug("Access Token is null, omit adding as credentials attribute '{}'", OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN);
+        }
         return credentials;
     }
 

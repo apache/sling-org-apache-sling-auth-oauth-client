@@ -43,12 +43,11 @@ import org.slf4j.LoggerFactory;
 // a config class is intentionally not defined, but a config is required to select an implementation
 @Component(configurationPolicy = REQUIRE)
 public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
-
+    
     private static final String PROPERTY_NAME_EXPIRES_AT = "expires_at";
-    protected static final String PROPERTY_NAME_ACCESS_TOKEN = "access_token";
     private static final String PROPERTY_NAME_REFRESH_TOKEN = "refresh_token";
 
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private static final Logger logger = LoggerFactory.getLogger(JcrUserHomeOAuthTokenStore.class);
     
     private final CryptoService cryptoService;
     
