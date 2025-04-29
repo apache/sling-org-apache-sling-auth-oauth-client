@@ -21,6 +21,7 @@ import java.util.Map;
 import org.apache.sling.auth.oauth_client.impl.RedisOAuthTokenStore.Config;
 import org.apache.sling.testing.mock.sling.ResourceResolverType;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
+import org.jetbrains.annotations.NotNull;
 import org.osgi.util.converter.Converters;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -32,14 +33,14 @@ import com.redis.testcontainers.RedisContainer;
 public class RedisOAuthTokenStoreTest extends TokenStoreTestSupport<RedisOAuthTokenStore> {
 
     @Container
-    private RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:6.2.6"));
+    private final RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:6.2.6"));
     
     RedisOAuthTokenStoreTest() {
         super(MockOidcConnection.DEFAULT_CONNECTION, new SlingContext(ResourceResolverType.JCR_MOCK));
     }
 
     @Override
-    RedisOAuthTokenStore createTokenStore() {
+    @NotNull RedisOAuthTokenStore createTokenStore() {
         Config cfg = Converters.standardConverter()
             .convert(Map.of("redisUrl", redis.getRedisURI()))
             .to(RedisOAuthTokenStore.Config.class);

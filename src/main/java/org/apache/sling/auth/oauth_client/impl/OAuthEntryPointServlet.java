@@ -27,7 +27,6 @@ import java.util.stream.Collectors;
 
 import javax.servlet.Servlet;
 import javax.servlet.ServletException;
-import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.sling.api.SlingHttpServletRequest;
@@ -42,9 +41,6 @@ import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.nimbusds.oauth2.sdk.AuthorizationRequest;
-import com.nimbusds.oauth2.sdk.ResponseType;
-import com.nimbusds.oauth2.sdk.Scope;
 import com.nimbusds.oauth2.sdk.id.ClientID;
 import com.nimbusds.oauth2.sdk.id.Identifier;
 import com.nimbusds.oauth2.sdk.id.State;
@@ -57,10 +53,7 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
 
     private static final long serialVersionUID = 1L;
 
-    // We don't want leave the cookie lying around for a long time because it is not needed.
-    // At the same time, some OAuth user authentication flows take a long time due to 
-    // consent, account selection, 2FA, etc. so we cannot make this too short.
-    private static final int COOKIE_MAX_AGE_SECONDS = 300;
+
     public static final String PATH = "/system/sling/oauth/entry-point"; // NOSONAR
     
     private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -90,8 +83,9 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
 
             ClientConnection connection = connections.get(desiredConnectionName);
             if ( connection == null ) {
-                if ( logger.isDebugEnabled() )
-                        logger.debug("Client requested unknown connection '{}'; known: '{}'", desiredConnectionName, connections.keySet());
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Client requested unknown connection '{}'; known: '{}'", desiredConnectionName, connections.keySet());
+                }
                 response.sendError(HttpServletResponse.SC_BAD_REQUEST);
                 return;
             }
@@ -112,37 +106,10 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
         // the client was registered
         ClientID clientID = new ClientID(conn.clientId());
         
-        String connectionName = connection.name();
         String redirect = request.getParameter(OAuthStateManager.PARAMETER_NAME_REDIRECT);
         String perRequestKey = new Identifier().getValue();
-        
-        Cookie cookie = new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, perRequestKey);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        cookie.setMaxAge(COOKIE_MAX_AGE_SECONDS);
-        
-        State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connectionName, redirect));
+        State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect));
 
-        URI authorizationEndpointUri = URI.create(conn.authorizationEndpoint());
-
-        // Compose the OpenID authentication request (for the code flow)
-        AuthorizationRequest.Builder authRequestBuilder = new AuthorizationRequest.Builder(
-                ResponseType.CODE,
-                clientID)
-            .scope(new Scope(conn.scopes().toArray(new String[0])))
-            .endpointURI(authorizationEndpointUri)
-            .redirectionURI(redirectUri)
-            .state(state);
-        
-        if ( conn.additionalAuthorizationParameters() != null ) {
-            conn.additionalAuthorizationParameters().stream()
-                .map( s -> s.split("=") )
-                .filter( p -> p.length == 2 )
-                .forEach( p -> authRequestBuilder.customParameter(p[0], p[1]));
-        }
-        
-        return new RedirectTarget(authRequestBuilder.build().toURI(), cookie);
+        return RedirectHelper.buildRedirectTarget(clientID, conn.authorizationEndpoint(), conn.scopes(), conn.additionalAuthorizationParameters(), state, perRequestKey, redirectUri);
     }
-    
-    record RedirectTarget(URI uri, Cookie cookie) {} 
 }

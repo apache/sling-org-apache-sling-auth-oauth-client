@@ -167,7 +167,7 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
         }
     }
     
-    private final  class OidcUser extends OidcIdentity implements ExternalUser {
+    private final class OidcUser extends OidcIdentity implements ExternalUser {
 
         private final OidcAuthCredentials creds;
         private final Iterable<String> groups;
@@ -196,7 +196,8 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
             return new ExternalIdentityRef(creds.getUserId(), creds.getIdp());
         }
     }
-    final  class OidcGroup extends OidcIdentity implements ExternalGroup {
+    
+    private final class OidcGroup extends OidcIdentity implements ExternalGroup {
 
         OidcGroup(@NotNull ExternalIdentityRef ref) {
             super(ref);
@@ -219,7 +220,7 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
     }
     
     static class OidcGroupRef extends ExternalIdentityRef {
-        OidcGroupRef(@NotNull String id, @NotNull String idp) {
+        private OidcGroupRef(@NotNull String id, @NotNull String idp) {
             super(id, idp);
         }
     }
