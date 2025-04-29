@@ -20,11 +20,13 @@ import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.osgi.framework.BundleContext;
 
 import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -33,18 +35,21 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class SlingLoginCookieManagerTest {
+    
+    private static final String COOKIE_NAME = "sling.oidcauth";
 
-    private MockRequest request = new MockRequest();
-    private MockResponse response = new MockResponse();
-    private SlingRepository repository = mock(SlingRepository.class);
+    private final MockRequest request = new MockRequest();
+    private final MockResponse response = new MockResponse();
+    private final SlingRepository repository = mock(SlingRepository.class);
     private SlingLoginCookieManager slingLoginCookieManager;
 
     @BeforeEach
@@ -56,8 +61,8 @@ class SlingLoginCookieManagerTest {
 
         when(config.tokenFile()).thenReturn(tempFile.getName());
         when(config.form_token_fastseed()).thenReturn(false);
-        when(config.sessionTimeout()).thenReturn(8 * 60 * 60 * 1000l);
-        when(config.cookieName()).thenReturn("sling.oidcauth");
+        when(config.sessionTimeout()).thenReturn(8 * 60 * 60 * 1000L);
+        when(config.cookieName()).thenReturn(COOKIE_NAME);
 
         BundleContext bundleContext = mock(BundleContext.class);
         when(bundleContext.getDataFile("cookie-tokens")).thenReturn(tempFile);
@@ -82,8 +87,9 @@ class SlingLoginCookieManagerTest {
         assertEquals(cookie, slingLoginCookieManager.getLoginCookie(request));
 
         AuthenticationInfo authInfo = slingLoginCookieManager.verifyLoginCookie(request);
-        assertTrue(authInfo.get(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS) instanceof OidcAuthCredentials);
-        assertEquals("testUser",  authInfo.getUser());
+        assertNotNull(authInfo);
+        assertInstanceOf(OidcAuthCredentials.class, authInfo.get(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS));
+        assertEquals("testUser", authInfo.getUser());
 
     }
 
@@ -118,20 +124,30 @@ class SlingLoginCookieManagerTest {
         assertNull(slingLoginCookieManager.verifyLoginCookie(request));
     }
 
+    @Test
+    void getLoginCookieMissingCookies() {
+        HttpServletRequest req = mock(HttpServletRequest.class);
+        assertNull(slingLoginCookieManager.getLoginCookie(req));
+    }
+
+    @Test
+    void getLoginCookieNameMismatch() {
+        HttpServletRequest req = mock(HttpServletRequest.class);
+        Cookie[] cookies = new Cookie[] {new Cookie("mismatch", "value")};
+        when(req.getCookies()).thenReturn(cookies);
+        assertNull(slingLoginCookieManager.getLoginCookie(req));
+    }
 
     @Test
     void getLoginCookie() {
+        HttpServletRequest req = mock(HttpServletRequest.class);
+        Cookie cookie = new Cookie(COOKIE_NAME, "cookie-value");
+        Cookie[] cookies = new Cookie[] {cookie};
+        when(req.getCookies()).thenReturn(cookies);
+        assertEquals(cookie, slingLoginCookieManager.getLoginCookie(req));
     }
 
-    @Test
-    void getUserId() {
-    }
-
-    @Test
-    void getTokenFile() {
-    }
-
-    static Cookie parseSetCookieHeader(String setCookieHeader) {
+    private static @NotNull Cookie parseSetCookieHeader(@NotNull String setCookieHeader) {
         // Split the header into parts
         String[] parts = setCookieHeader.split(";");
         String[] nameValue = parts[0].split("=", 2);
