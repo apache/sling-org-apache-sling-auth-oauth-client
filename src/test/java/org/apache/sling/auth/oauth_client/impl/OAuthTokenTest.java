@@ -19,20 +19,23 @@ package org.apache.sling.auth.oauth_client.impl;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+
 class OAuthTokenTest {
 
     @Test
     void testValidToken() {
         OAuthToken token = new OAuthToken(TokenState.VALID, "valid_token");
-        assert token.getState() == TokenState.VALID;
-        assert "valid_token".equals(token.getValue());
+        assertSame(TokenState.VALID, token.getState());
+        assertEquals("valid_token", token.getValue());
     }
 
     @Test
     void testValidTokenWithoutState() {
         OAuthToken token = new OAuthToken("valid_token");
-        assert token.getState() == TokenState.VALID;
-        assert "valid_token".equals(token.getValue());
+        assertSame(TokenState.VALID, token.getState());
+        assertEquals("valid_token", token.getValue());
     }
 
     @Test
@@ -41,14 +44,14 @@ class OAuthTokenTest {
             OAuthToken token = new OAuthToken(TokenState.VALID, null);
             Assertions.fail("Expected IllegalArgumentException");
         } catch (IllegalArgumentException e) {
-            assert "Token state is VALID but no token value is provided".equals(e.getMessage());
+            assertEquals("Token state is VALID but no token value is provided", e.getMessage());
         }
     }
 
     @Test
     void testNullToken() {
         OAuthToken token = new OAuthToken(TokenState.MISSING, null);
-        assert token.getState() == TokenState.MISSING;
+        assertSame(TokenState.MISSING, token.getState());
     }
     
     @Test
@@ -58,7 +61,7 @@ class OAuthTokenTest {
             token.getValue();
             Assertions.fail("Expected IllegalStateException");
         } catch (IllegalStateException e) {
-            assert "Can't retrieve a token value when the token state is MISSING".equals(e.getMessage());
+            assertEquals("Can't retrieve a token value when the token state is MISSING", e.getMessage());
         }
     }
 
@@ -69,7 +72,7 @@ class OAuthTokenTest {
             token.getValue();
             Assertions.fail("Expected IllegalStateException");
         } catch (IllegalStateException e) {
-            assert "Can't retrieve a token value when the token state is EXPIRED".equals(e.getMessage());
+            assertEquals("Can't retrieve a token value when the token state is EXPIRED", e.getMessage());
         }
     }
 }

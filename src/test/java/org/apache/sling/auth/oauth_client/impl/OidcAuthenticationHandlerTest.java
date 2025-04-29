@@ -651,9 +651,9 @@ class OidcAuthenticationHandlerTest {
 
         server.createContext("/jwks.json", exchange -> {
             exchange.getResponseHeaders().add("Content-Type", "application/json");
-            String response = publicJWKSet.toString();
-            exchange.sendResponseHeaders(200, response.length());
-            exchange.getResponseBody().write(response.getBytes());
+            String responseStr = publicJWKSet.toString();
+            exchange.sendResponseHeaders(200, responseStr.length());
+            exchange.getResponseBody().write(responseStr.getBytes());
             exchange.close();
         });
 
@@ -813,9 +813,9 @@ class OidcAuthenticationHandlerTest {
     @Test
     void authenticationSucceededLoginManagerWithNoLoginCookieWithRedirect() throws IOException {
         when(loginCookieManager.getLoginCookie(request)).thenReturn(null);
-        MockResponse response = new MockResponse();
-        MockRequest request = new MockRequest();
-        request.setAttribute(OidcAuthenticationHandler.REDIRECT_ATTRIBUTE_NAME, "http://localhost:8080/redirect");
+        MockResponse mockResponse = new MockResponse();
+        MockRequest mockRequest = new MockRequest();
+        mockRequest.setAttribute(OidcAuthenticationHandler.REDIRECT_ATTRIBUTE_NAME, "http://localhost:8080/redirect");
 
         when(config.defaultRedirect()).thenReturn("http://localhost:8080");
 
@@ -824,13 +824,13 @@ class OidcAuthenticationHandlerTest {
         OidcAuthCredentials credentials = new OidcAuthCredentials("testUser", "oidc");
         credentials.setAttribute(".token", "testToken");
         authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
-        assertTrue(oidcAuthenticationHandler.authenticationSucceeded(request, response, authInfo ));
-        assertEquals("http://localhost:8080/redirect", response.getSendRedirect() );
+        assertTrue(oidcAuthenticationHandler.authenticationSucceeded(mockRequest, mockResponse, authInfo ));
+        assertEquals("http://localhost:8080/redirect", mockResponse.getSendRedirect() );
 
         //Test the IOException on response
         HttpServletResponse mockExceptionResponse = mock(HttpServletResponse.class);
         doThrow(new IOException("Mocked Exception")).when(mockExceptionResponse).sendRedirect(anyString());
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> oidcAuthenticationHandler.authenticationSucceeded(request, mockExceptionResponse, authInfo));
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> oidcAuthenticationHandler.authenticationSucceeded(mockRequest, mockExceptionResponse, authInfo));
         assertEquals("java.io.IOException: Mocked Exception", exception.getMessage());
 
     }
