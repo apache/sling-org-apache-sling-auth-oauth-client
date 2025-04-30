@@ -21,6 +21,8 @@ package org.apache.sling.auth.oauth_client.impl;
 import org.awaitility.Awaitility;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,6 +31,8 @@ import java.nio.file.Files;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.Assert.assertEquals;
@@ -36,18 +40,29 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
-
 /* TokenStore tests, taken from org.apache.sling.auth.form */
- public class TokenStoreTest {
+@RunWith(Parameterized.class)
+public class TokenStoreTest {
     private static final long SESSION_TIMEOUT_MSEC = 60 * 1000L;
     private static final long DEFAULT_EXPIRATION_TIME_MSEC = System.currentTimeMillis() + SESSION_TIMEOUT_MSEC / 2;
-    private static final boolean DEFAULT_FAST_SEED = false;
     private static final String USER_ID = "user_" + UUID.randomUUID();
 
+    @Parameterized.Parameters(name = "name={1}")
+    public static Collection<Object[]> parameters() {
+        return List.of(
+                new Object[] { false, "fastSeed = false" },
+                new Object[] { true, "fastSeed = true" });
+    }
+
+    private final boolean fastSeed;
     private TokenStore store;
     private String encodedToken;
     private File tokenFile;
     private int additionalFileIndex;
+    
+    public TokenStoreTest(boolean fastSeed, String name) {
+        this.fastSeed = fastSeed;
+    }
     
     private File additionalTokenFile() {
         return new File(tokenFile.getParent(), tokenFile.getName() + "-" + additionalFileIndex++);
@@ -56,7 +71,7 @@ import static org.junit.Assert.assertTrue;
     @Before
     public void setup() throws IOException, InvalidKeyException, NoSuchAlgorithmException, IllegalStateException {
         tokenFile = Files.createTempFile(getClass().getName(), "tokenstore").toFile();
-        store = new TokenStore(tokenFile, SESSION_TIMEOUT_MSEC, DEFAULT_FAST_SEED);
+        store = new TokenStore(tokenFile, SESSION_TIMEOUT_MSEC, fastSeed);
         encodedToken = store.encode(DEFAULT_EXPIRATION_TIME_MSEC, USER_ID);
     }
 
@@ -73,7 +88,7 @@ import static org.junit.Assert.assertTrue;
             "nothing",
             "0@bad@token"
         };
-        for(String token : invalid) {
+        for (String token : invalid) {
             assertFalse(store.isValid(token));
         }        
     }
@@ -88,43 +103,34 @@ import static org.junit.Assert.assertTrue;
             .until(() -> !store.isValid(expired));
         assertFalse(store.isValid(expired));
     }
-
+    
     @Test
-    public void loadTokenFileTest() throws InvalidKeyException, NoSuchAlgorithmException, IllegalStateException {
-        final TokenStore newStore = new TokenStore(tokenFile, SESSION_TIMEOUT_MSEC, DEFAULT_FAST_SEED);
+    public void loadTokenFileTest() throws Exception {
+        final TokenStore newStore = new TokenStore(tokenFile, SESSION_TIMEOUT_MSEC, fastSeed);
         assertTrue(newStore.isValid(encodedToken));
 
-        final TokenStore emptyStore = new TokenStore(additionalTokenFile(), SESSION_TIMEOUT_MSEC, DEFAULT_FAST_SEED);
+        final TokenStore emptyStore = new TokenStore(additionalTokenFile(), SESSION_TIMEOUT_MSEC, fastSeed);
         assertFalse(emptyStore.isValid(encodedToken));
     }
 
     @Test
-    public void encodingPartsTest() throws InvalidKeyException, NoSuchAlgorithmException, IllegalStateException {
+    public void encodingPartsTest() throws Exception {
+        String lastHexNumber = "";
+        for (int i = 1; i < 100; i++) {
+            final String uniqueUserId = "user-" + i;
+            final String[] parts = TokenStore.split(store.encode(123, uniqueUserId));
 
-        // Test with both a normal and "fast seed" store
-        final TokenStore [] testStores = {
-            new TokenStore(additionalTokenFile(), SESSION_TIMEOUT_MSEC, true),
-            new TokenStore(additionalTokenFile(), SESSION_TIMEOUT_MSEC, false)
-        };
+            // First a unique large hex number
+            assertNotEquals(parts[0], lastHexNumber);
+            lastHexNumber = parts[0];
+            new BigInteger(lastHexNumber, 16);
+            assertTrue(lastHexNumber.length() > 20);
 
-        for (TokenStore testStore : testStores) {
-            String lastHexNumber = "";
-            for(int i=1 ; i < 100; i++) {
-                final String uniqueUserId = "user-" + i;
-                final String [] parts = TokenStore.split(testStore.encode(123, uniqueUserId));
-    
-                // First a unique large hex number
-                assertNotEquals(parts[0], lastHexNumber);
-                lastHexNumber = parts[0];
-                new BigInteger(lastHexNumber, 16);
-                assertTrue(lastHexNumber.length() > 20);
-    
-                // Then the timeout prefixed by something else
-                assertEquals("123", parts[1].substring(1));
-    
-                // Then the user id
-                assertEquals(uniqueUserId, parts[2]);
-            }
+            // Then the timeout prefixed by something else
+            assertEquals("123", parts[1].substring(1));
+
+            // Then the user id
+            assertEquals(uniqueUserId, parts[2]);
         }
     }
 }
