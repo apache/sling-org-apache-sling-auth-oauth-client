@@ -221,9 +221,9 @@
                                 <repositoryUrl>file://${project.build.directory}/artifacts</repositoryUrl>
                             </repositoryUrls>
                             <launcherArguments>
-                                <!-- <vm-options>
+                                <vm-options>
                                     <value>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:3007</value>
-                                </vm-options> -->
+                                </vm-options>
                                 <frameworkProperties>
                                     <org.osgi.service.http.port>${http.port}</org.osgi.service.http.port>
                                 </frameworkProperties>

@@ -53,7 +53,10 @@ public class CryptoOAuthStateManager implements OAuthStateManager {
         if ( state.redirect() != null ) {
             rawState += "|" + state.redirect();
         }
-        
+        if ( state.nonce() != null ) {
+            rawState += "|" + state.nonce();
+        }
+
         return new State(cryptoService.encrypt(rawState));
     }
 
@@ -70,10 +73,12 @@ public class CryptoOAuthStateManager implements OAuthStateManager {
             
             String[] parts = rawState.split("\\|");
             if ( parts.length == 2 )
-                return Optional.of(new OAuthState(parts[0], parts[1], null));
+                return Optional.of(new OAuthState(parts[0], parts[1], null, null));
             else if ( parts.length == 3) 
-                return Optional.of(new OAuthState(parts[0], parts[1], parts[2]));
-                        
+                return Optional.of(new OAuthState(parts[0], parts[1], parts[2], null));
+            else if ( parts.length == 4)
+                return Optional.of(new OAuthState(parts[0], parts[1], parts[2], parts[3]));
+
             logger.warn("Decoded state token does not contain the expected number of parts");
             return Optional.empty();
         } catch (RuntimeException e) {

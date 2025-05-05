@@ -27,6 +27,7 @@ public interface OAuthStateManager {
     String PARAMETER_NAME_REDIRECT = "redirect";
     String COOKIE_NAME_REQUEST_KEY = "sling.oauth-request-key";
     String COOKIE_NAME_CODE_VERIFIER = "sling.oauth-code-verifier";
+    String COOKIE_NAME_NONCE = "sling.oauth-nonce";
 
     @NotNull State toNimbusState(@NotNull OAuthState state);
     

@@ -16,13 +16,14 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
-import com.nimbusds.oauth2.sdk.AuthorizationRequest;
 import com.nimbusds.oauth2.sdk.ResponseType;
 import com.nimbusds.oauth2.sdk.Scope;
 import com.nimbusds.oauth2.sdk.id.ClientID;
 import com.nimbusds.oauth2.sdk.id.State;
 import com.nimbusds.oauth2.sdk.pkce.CodeChallengeMethod;
 import com.nimbusds.oauth2.sdk.pkce.CodeVerifier;
+import com.nimbusds.openid.connect.sdk.AuthenticationRequest;
+import com.nimbusds.openid.connect.sdk.Nonce;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -44,7 +45,7 @@ class RedirectHelper {
     
     static @NotNull RedirectTarget buildRedirectTarget(@NotNull ClientID clientID, @NotNull String authorizationEndpoint, @NotNull List<String> scopes,
                                                        @Nullable List<String> additionalAuthorizationParameters, @NotNull State state,
-                                                       @NotNull String perRequestKey, @NotNull URI redirectUri, boolean pkceEnabled) {
+                                                       @NotNull String perRequestKey, @NotNull URI redirectUri, boolean pkceEnabled, @Nullable String nonce) {
 
         ArrayList<Cookie> cookies = new ArrayList<>();
         Cookie requestKeyCookie = buildCookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, perRequestKey);
@@ -52,31 +53,35 @@ class RedirectHelper {
 
         //-----------------
         URI authorizationEndpointUri = URI.create(authorizationEndpoint);
-        AuthorizationRequest.Builder authRequestBuilder;
+
+        // Compose the OpenID authentication request (for the code flow)
+        AuthenticationRequest.Builder authRequestBuilder = new AuthenticationRequest.Builder(
+                ResponseType.CODE,
+                new Scope(scopes.toArray(new String[scopes.size()])),
+                clientID,
+                redirectUri
+        )
+        .endpointURI(authorizationEndpointUri)
+        .state(state);
+
+        if (nonce != null) {
+            Cookie nonceCookie = buildCookie(OAuthStateManager.COOKIE_NAME_NONCE, nonce);
+            cookies.add(nonceCookie);
+
+            authRequestBuilder.nonce(new Nonce(nonce));
+
+        }
+
         if (pkceEnabled) {
             // Generate a new random 256 bit code verifier for PKCE
             CodeVerifier codeVerifier = new CodeVerifier();
 
-            authRequestBuilder = new AuthorizationRequest.Builder(
-                    new ResponseType("code"),
-                    clientID)
-                    .endpointURI(authorizationEndpointUri)
-                    .redirectionURI(redirectUri)
-                    .scope(new Scope(scopes.toArray(new String[0])))
-                    .state(state)
-                    .codeChallenge(codeVerifier, CodeChallengeMethod.S256);
+            authRequestBuilder.codeChallenge(codeVerifier, CodeChallengeMethod.S256);
+
             Cookie codeVerifierCookie = buildCookie(OAuthStateManager.COOKIE_NAME_CODE_VERIFIER, codeVerifier.getValue());
             cookies.add(codeVerifierCookie);
-        } else {
-            // Compose the OpenID authentication request (for the code flow)
-            authRequestBuilder = new AuthorizationRequest.Builder(
-                    ResponseType.CODE,
-                    clientID)
-                    .scope(new Scope(scopes.toArray(new String[0])))
-                    .endpointURI(authorizationEndpointUri)
-                    .redirectionURI(redirectUri)
-                    .state(state);
         }
+
         if (additionalAuthorizationParameters != null) {
             additionalAuthorizationParameters.stream()
                     .map(s -> s.split("="))
