@@ -18,33 +18,34 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 
-public class ResolvedOidcConnection extends ResolvedConnection {
+class ResolvedOidcConnection extends ResolvedConnection {
 
     private final URI jwkSetURL;
     private final String issuer;
 
-    public ResolvedOidcConnection(String name, String authorizationEndpoint, String tokenEndpoint, String clientId,
-                                  String clientSecret, List<String> scopes, List<String> additionalAuthorizationParameters,
-                                  URI jwkSetURL, String issuer) {
+    private ResolvedOidcConnection(@NotNull String name, @NotNull String authorizationEndpoint, @NotNull String tokenEndpoint,
+                                   @NotNull String clientId, @Nullable String clientSecret, @NotNull List<String> scopes,
+                                   @NotNull List<String> additionalAuthorizationParameters, @Nullable URI jwkSetURL, @NotNull String issuer) {
         super(name, authorizationEndpoint, tokenEndpoint, clientId, clientSecret, scopes, additionalAuthorizationParameters);
         this.jwkSetURL = jwkSetURL;
         this.issuer = issuer;
     }
 
-    public URI jwkSetURL() {
+    @Nullable URI jwkSetURL() {
         return jwkSetURL;
     }
 
-    public String issuer() {
+    @NotNull String issuer() {
         return issuer;
     }
 
-    public static @NotNull ResolvedOidcConnection resolve(@NotNull ClientConnection connection) {
+    static @NotNull ResolvedConnection resolve(@NotNull ClientConnection connection) {
         if (connection instanceof OidcConnectionImpl) {
             OidcConnectionImpl impl = (OidcConnectionImpl) connection;
             return new ResolvedOidcConnection(

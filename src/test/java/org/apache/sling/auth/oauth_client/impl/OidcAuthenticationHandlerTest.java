@@ -33,6 +33,7 @@ import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
+import org.apache.sling.commons.crypto.CryptoService;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.junit.jupiter.api.AfterEach;
@@ -88,14 +89,23 @@ class OidcAuthenticationHandlerTest {
         config = mock(OidcAuthenticationHandler.Config.class);
         when(config.idp()).thenReturn("myIdP");
         when(config.checkNonce()).thenReturn(true);
+        when(config.path()).thenReturn(new String[]{"/"});
         loginCookieManager = mock(LoginCookieManager.class);
-        userInfoProcessor = mock(UserInfoProcessor.class);
+
+        SlingUserInfoProcessorImpl.Config userInfoConfig = mock(SlingUserInfoProcessorImpl.Config.class);
+        when(userInfoConfig.storeAccessToken()).thenReturn(false);
+        when(userInfoConfig.storeRefreshToken()).thenReturn(false);
+        userInfoProcessor = new SlingUserInfoProcessorImpl(mock(CryptoService.class), userInfoConfig);
+
+        when(config.userInfoEnabled()).thenReturn(true);
+        when(config.pkceEnabled()).thenReturn(false);
         connections = new ArrayList<>();
         connections.add(MockOidcConnection.DEFAULT_CONNECTION);
 
         oauthStateManager = new StubOAuthStateManager();
 
         request = mock(HttpServletRequest.class);
+
         when(request.getRequestURL()).thenReturn(new StringBuffer("http://localhost:8080"));
 
         response = mock(HttpServletResponse.class);
@@ -131,8 +141,7 @@ class OidcAuthenticationHandlerTest {
         when(request.getQueryString()).thenReturn("code=authorizationCode");
         when(request.getRequestURL()).thenReturn(new StringBuffer("http://localhost:8080"));
         when(request.getCookies()).thenReturn(null);
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> oidcAuthenticationHandler.extractCredentials(request, response));
-        assertEquals("No state found in authorization response", exception.getMessage());
+        assertNull(oidcAuthenticationHandler.extractCredentials(request, response));
     }
 
     @Test
@@ -344,7 +353,7 @@ class OidcAuthenticationHandlerTest {
                 .generate();
 
         //Test with an id token signed by another key, and expired
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken("eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJ0MnFtQ2I2YTJIcHJxR3FZbmhWQm92cUdKRExZam9VTEgxSTNDVkZCRnhBIn0.eyJleHAiOjE3NDQwMTM4MTYsImlhdCI6MTc0NDAxMzUxNiwiYXV0aF90aW1lIjoxNzQ0MDEzNTExLCJqdGkiOiI5NmE5YWI3NS0yNTIzLTQyMjQtOTU5Zi00ZTQ5MWNiZGUyYWUiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjU2OTY3L3JlYWxtcy9zbGluZyIsImF1ZCI6Im9pZGMtdGVzdCIsInN1YiI6Ijk2OGQ4MDhjLTU5MjMtNDFiOS1iOTZjLWNhNzJiMWZlOTMzOSIsInR5cCI6IklEIiwiYXpwIjoib2lkYy10ZXN0Iiwic2Vzc2lvbl9zdGF0ZSI6IjMzMTM4YTMzLTM4MjgtNDk0OS1iMTRhLWQ2Y2IyNjcxNWRlOSIsImF0X2hhc2giOiJ4enlkbVlxdW9xYm9TZjJkaHJhdmNBIiwiYWNyIjoiMSIsInNpZCI6IjMzMTM4YTMzLTM4MjgtNDk0OS1iMTRhLWQ2Y2IyNjcxNWRlOSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicHJlZmVycmVkX3VzZXJuYW1lIjoidGVzdCIsImdpdmVuX25hbWUiOiIiLCJmYW1pbHlfbmFtZSI6IiJ9.GGBOBoi9i0Y2NhT0Ypl_DT9Cy98qHh3XuM0E3Ol8zChsDM53RwMGbkI_Rl3t5k4MCl9_bVXMyCy-0X6OsUW6xfN5WY_ET6G_l39Xdk5BXgZUwpVQc03Z0wD7SCN718QkeWc0bi9ucfyE6GHxLKQL3q6rlG0BzH7nQHha74mQW3naZFWvKJTrRng7Zr_ZQOQDEZTSW8sXq_qabQhkJ-j8yeepVnP4Ws5rkqcs0UixZpRvsmYIv5rep5AHDOKHN6SOra42hxREhZaG7Rga9n-T7Zr5_7pajaLElf6TUkdBOol3x6hFH24RbhtxoPIIeqEOUPkGZkrXhHzR4bIKrVa8pB", rsaJWK, "http://localhost:4567", createMockCookies()));
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken("eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJ0MnFtQ2I2YTJIcHJxR3FZbmhWQm92cUdKRExZam9VTEgxSTNDVkZCRnhBIn0.eyJleHAiOjE3NDQwMTM4MTYsImlhdCI6MTc0NDAxMzUxNiwiYXV0aF90aW1lIjoxNzQ0MDEzNTExLCJqdGkiOiI5NmE5YWI3NS0yNTIzLTQyMjQtOTU5Zi00ZTQ5MWNiZGUyYWUiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjU2OTY3L3JlYWxtcy9zbGluZyIsImF1ZCI6Im9pZGMtdGVzdCIsInN1YiI6Ijk2OGQ4MDhjLTU5MjMtNDFiOS1iOTZjLWNhNzJiMWZlOTMzOSIsInR5cCI6IklEIiwiYXpwIjoib2lkYy10ZXN0Iiwic2Vzc2lvbl9zdGF0ZSI6IjMzMTM4YTMzLTM4MjgtNDk0OS1iMTRhLWQ2Y2IyNjcxNWRlOSIsImF0X2hhc2giOiJ4enlkbVlxdW9xYm9TZjJkaHJhdmNBIiwiYWNyIjoiMSIsInNpZCI6IjMzMTM4YTMzLTM4MjgtNDk0OS1iMTRhLWQ2Y2IyNjcxNWRlOSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicHJlZmVycmVkX3VzZXJuYW1lIjoidGVzdCIsImdpdmVuX25hbWUiOiIiLCJmYW1pbHlfbmFtZSI6IiJ9.GGBOBoi9i0Y2NhT0Ypl_DT9Cy98qHh3XuM0E3Ol8zChsDM53RwMGbkI_Rl3t5k4MCl9_bVXMyCy-0X6OsUW6xfN5WY_ET6G_l39Xdk5BXgZUwpVQc03Z0wD7SCN718QkeWc0bi9ucfyE6GHxLKQL3q6rlG0BzH7nQHha74mQW3naZFWvKJTrRng7Zr_ZQOQDEZTSW8sXq_qabQhkJ-j8yeepVnP4Ws5rkqcs0UixZpRvsmYIv5rep5AHDOKHN6SOra42hxREhZaG7Rga9n-T7Zr5_7pajaLElf6TUkdBOol3x6hFH24RbhtxoPIIeqEOUPkGZkrXhHzR4bIKrVa8pB", rsaJWK, "http://localhost:4567", createMockCookies(), false));
         assertEquals("Signed JWT rejected: Another algorithm expected, or no matching key(s) found", exception.getMessage());
 
     }
@@ -356,7 +365,7 @@ class OidcAuthenticationHandlerTest {
                 .generate();
 
         //Test with an id token with a wrong client id
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "wrong-client-id", ISSUER), rsaJWK, "http://localhost:4567", createMockCookies()));
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "wrong-client-id", ISSUER), rsaJWK, "http://localhost:4567", createMockCookies(), false));
         assertEquals("Unexpected JWT audience: [wrong-client-id]", exception.getMessage());
     }
 
@@ -367,7 +376,7 @@ class OidcAuthenticationHandlerTest {
                 .generate();
 
         //Test with an id token signed but with a wrong issuer
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", "wrong-issuer"), rsaJWK, "http://localhost:4567", createMockCookies()));
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", "wrong-issuer"), rsaJWK, "http://localhost:4567", createMockCookies(), false));
         assertEquals("Unexpected JWT issuer: wrong-issuer", exception.getMessage());
     }
 
@@ -377,9 +386,8 @@ class OidcAuthenticationHandlerTest {
                 .keyID("123")
                 .generate();
         when(config.userInfoEnabled()).thenReturn(true);
-        userInfoProcessor = new UserInfoProcessorImpl();
         //Test with an id token signed by another key, and expired
-        AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", createMockCookies());
+        AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", createMockCookies(), false);
         assertEquals("1234567890", authInfo.get("user.name"));
         assertEquals("testUser", ((OidcAuthCredentials)authInfo.get("user.jcr.credentials")).getAttribute("profile/name"));
     }
@@ -390,14 +398,13 @@ class OidcAuthenticationHandlerTest {
                 .keyID("123")
                 .generate();
         when(config.userInfoEnabled()).thenReturn(true);
-        userInfoProcessor = new UserInfoProcessorImpl();
 
         Cookie stateCookie = mock(Cookie.class);
         when(stateCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
         when(stateCookie.getValue()).thenReturn("part1");
 
         //Test with an id token signed by another key, and expired
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", new Cookie[] {stateCookie} ));
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", new Cookie[] {stateCookie}, false));
         assertEquals("Failed state check: No request cookie named sling.oauth-nonce found", exception.getMessage());
 
     }
@@ -408,7 +415,6 @@ class OidcAuthenticationHandlerTest {
                 .keyID("123")
                 .generate();
         when(config.userInfoEnabled()).thenReturn(true);
-        userInfoProcessor = new UserInfoProcessorImpl();
 
         Cookie stateCookie = mock(Cookie.class);
         when(stateCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
@@ -420,7 +426,7 @@ class OidcAuthenticationHandlerTest {
 
 
         //Test with an id token signed by another key, and expired
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", new Cookie[]{stateCookie, nonceCookie}));
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", new Cookie[]{stateCookie, nonceCookie}, false));
         assertEquals("Unexpected JWT nonce (nonce) claim: nonce", exception.getMessage());
     }
 
@@ -430,7 +436,6 @@ class OidcAuthenticationHandlerTest {
                 .keyID("123")
                 .generate();
         when(config.userInfoEnabled()).thenReturn(true);
-        userInfoProcessor = new UserInfoProcessorImpl();
 
         Cookie stateCookie = mock(Cookie.class);
         when(stateCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
@@ -441,11 +446,59 @@ class OidcAuthenticationHandlerTest {
         when(nonceCookie.getValue()).thenReturn("invalidNonce");
 
         when(config.checkNonce()).thenReturn(false);
-        AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", new Cookie[] {stateCookie, nonceCookie} );
+        when(config.path()).thenReturn(new String[]{"/"});
+        when(request.getRequestURI()).thenReturn("http://localhost:8080");
+        AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", new Cookie[] {stateCookie, nonceCookie}, false);
         assertEquals("1234567890", authInfo.get("user.name"));
         assertEquals("testUser", ((OidcAuthCredentials)authInfo.get("user.jcr.credentials")).getAttribute("profile/name"));
 
     }
+
+    @Test
+    void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithUserInfo_WithPkceEnabledWithoutCookie() throws JOSEException {
+        RSAKey rsaJWK = new RSAKeyGenerator(2048)
+                .keyID("123")
+                .generate();
+        when(config.userInfoEnabled()).thenReturn(true);
+        when(config.pkceEnabled()).thenReturn(true);
+        when(config.checkNonce()).thenReturn(false);
+
+        Cookie stateCookie = mock(Cookie.class);
+        when(stateCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        when(stateCookie.getValue()).thenReturn("part1");
+
+        when(config.checkNonce()).thenReturn(false);
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", new Cookie[] {stateCookie}, false));
+        assertEquals("Failed state check: No request cookie named sling.oauth-code-verifier found", exception.getMessage());
+    }
+
+    @Test
+    void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithUserInfo_WithPkceEnabledWithCookie() throws JOSEException {
+        RSAKey rsaJWK = new RSAKeyGenerator(2048)
+                .keyID("123")
+                .generate();
+        when(config.userInfoEnabled()).thenReturn(true);
+        when(config.pkceEnabled()).thenReturn(true);
+        when(config.checkNonce()).thenReturn(false);
+
+        Cookie stateCookie = mock(Cookie.class);
+        when(stateCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        when(stateCookie.getValue()).thenReturn("part1");
+
+        Cookie verifierCookie = mock(Cookie.class);
+        when(verifierCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_CODE_VERIFIER);
+        when(verifierCookie.getValue()).thenReturn("12345678901234567890123456789012345678901234");
+
+        when(request.getCookies()).thenReturn(new Cookie[] {stateCookie, verifierCookie});
+
+        when(config.checkNonce()).thenReturn(false);
+
+        AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", new Cookie[]{stateCookie, verifierCookie}, true);
+        //Remark: presence of state parameter is checked inside extractCredentials_WithMatchingState_WithValidConnection_WithIdToken
+        assertEquals("1234567890", authInfo.get("user.name"));
+    }
+
 
     @Test
     void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithoutUserInfo() throws JOSEException {
@@ -453,9 +506,8 @@ class OidcAuthenticationHandlerTest {
                 .keyID("123")
                 .generate();
         when(config.userInfoEnabled()).thenReturn(false);
-        userInfoProcessor = new UserInfoProcessorImpl();
         //Test with an id token signed by another key, and expired
-        AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", createMockCookies());
+        AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", createMockCookies(), false);
         assertEquals("1234567890", authInfo.get("user.name"));
     }
 
@@ -527,7 +579,6 @@ class OidcAuthenticationHandlerTest {
         createOidcAuthenticationHandler();
 
 
-        userInfoProcessor = new UserInfoProcessorImpl();
         //Test with an id token signed by another key, and expired
         RuntimeException exception = assertThrows(RuntimeException.class, () -> oidcAuthenticationHandler.extractCredentials(request, response));
         assertEquals("Error in userinfo response: invalid_request. Status code: 400. Invalid request", exception.getMessage());
@@ -600,12 +651,20 @@ class OidcAuthenticationHandlerTest {
         createOidcAuthenticationHandler();
 
 
-        userInfoProcessor = new UserInfoProcessorImpl();
         //Test with an id token signed by another key, and expired
         RuntimeException exception = assertThrows(RuntimeException.class, () -> oidcAuthenticationHandler.extractCredentials(request, response));
         assertEquals("com.nimbusds.oauth2.sdk.ParseException: Couldn't parse UserInfo claims: Invalid JSON", exception.getMessage());
     }
 
+    //make sure we to not raise an exception trying to fetch the state parameter
+    @Test
+    void extractCredentials_WithParameters() {
+        request = mock(HttpServletRequest.class);
+        when(request.getQueryString()).thenReturn("param1=value1&param2=value2");
+        when(request.getRequestURL()).thenReturn(new StringBuffer("http://localhost:8080?"));
+
+        assertNull(oidcAuthenticationHandler.extractCredentials(request, response));
+    }
 
     private String createIdToken(RSAKey rsaJWK, String clientId, String issuer) throws JOSEException {
         // Create the JWT claims set
@@ -638,8 +697,12 @@ class OidcAuthenticationHandlerTest {
         return signedJWT.serialize();
     }
     
-    private AuthenticationInfo extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(String idToken, RSAKey rsaJWK, String baseUrl, Cookie[] cookies) {
+    private AuthenticationInfo extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(String idToken, RSAKey rsaJWK, String baseUrl, Cookie[] cookies, boolean withPkce) {
         idpServer.createContext("/token", exchange -> {
+                    if (withPkce) {
+                        assertTrue(new String(exchange.getRequestBody().readAllBytes()).contains("code_verifier=12345678901234567890123456789012345678901234"));
+                    }
+
                     exchange.getResponseHeaders().add("Content-Type", "application/json");
                     String responseMsg = "{\"access_token\":\"myAccessToken\"," +
                             "\"expires_in\":\"360\"," +
@@ -651,7 +714,7 @@ class OidcAuthenticationHandlerTest {
                     exchange.sendResponseHeaders(200, responseMsg.length());
                     exchange.getResponseBody().write(responseMsg.getBytes());
                     exchange.close();
-                });
+        });
         idpServer.createContext("/userinfo", exchange -> {
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             String responseMsg = "{" +
@@ -759,8 +822,109 @@ class OidcAuthenticationHandlerTest {
     }
 
     @Test
-    void requestCredentialsDefaultConnection() throws IOException {
+    void requestCredentialsDefaultConnectionIOException() throws IOException {
 
+        //This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(new String[]{"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[]{"access_type=offline"},
+                oidcProviderMetadataRegistry)
+        );
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+        when(config.path()).thenReturn(new String[]{"/"});
+
+        createOidcAuthenticationHandler();
+
+        // Test the Exception on response
+        response = mock(HttpServletResponse.class);
+        when(request.getRequestURI()).thenReturn("http://localhost:8080");
+        //mock to trow an exception when response.sendRedirect is called
+        doThrow(new IOException("Mocked Exception")).when(response).sendRedirect(anyString());
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> oidcAuthenticationHandler.requestCredentials(request, response));
+        assertEquals("java.io.IOException: Mocked Exception", exception.getMessage());
+    }
+
+    @Test
+    void requestCredentialsDefaultConnectionWithNonce() {
+
+        //This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(new String[]{"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[]{"access_type=offline"},
+                oidcProviderMetadataRegistry)
+        );
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+
+        when(request.getRequestURI()).thenReturn("http://localhost");
+        MockResponse mockResponse = new MockResponse();
+
+        createOidcAuthenticationHandler();
+        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+                String cookieValue = cookie.getValue();
+                assertNotNull(cookieValue);
+                assertTrue(mockResponse.getSendRedirect().contains("state=" + cookieValue));
+                return true;
+            }
+            return false;
+        }));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_NONCE.equals(cookie.getName())) {
+                String cookieValue = cookie.getValue();
+                assertNotNull(cookieValue);
+                assertTrue(mockResponse.getSendRedirect().contains("nonce=" + cookieValue));
+                return true;
+            }
+            return false;
+        }));
+        assertFalse(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_CODE_VERIFIER.equals(cookie.getName())) {
+                return true;
+            }
+            return false;
+        }));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_REDIRECT_URI.equals(cookie.getName())) {
+                String cookieValue = cookie.getValue();
+                assertNotNull(cookieValue);
+                assertEquals("http://localhost", cookieValue);
+                return true;
+            }
+            return false;
+        }));
+
+
+    }
+
+    @Test
+    void requestCredentialsDefaultConnectionWithoutNonce()  {
         //This is the class used by Sling to configure the Authentication Handler
         OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
         String mockIdPUrl = "http://localhost:8080";
@@ -784,6 +948,11 @@ class OidcAuthenticationHandlerTest {
 
         MockResponse mockResponse = new MockResponse();
 
+        when(config.checkNonce()).thenReturn(false);
+
+        when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1%7C"+MOCK_OIDC_PARAM);
+        when(request.getRequestURI()).thenReturn("http://localhost");
+
         createOidcAuthenticationHandler();
         assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
         assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
@@ -795,13 +964,93 @@ class OidcAuthenticationHandlerTest {
             }
             return false;
         }));
+        assertFalse(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_NONCE.equals(cookie.getName())) {
+                return true;
+            }
+            return false;
+        }));
+        assertFalse(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_CODE_VERIFIER.equals(cookie.getName())) {
+                return true;
+            }
+            return false;
+        }));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_REDIRECT_URI.equals(cookie.getName())) {
+                String cookieValue = cookie.getValue();
+                assertNotNull(cookieValue);
+                assertEquals("http://localhost", cookieValue);
+                return true;
+            }
+            return false;
+        }));
 
-        // Test the Exception on response
-        response = mock(HttpServletResponse.class);
-        //mock to trow an exception when response.sendRedirect is called
-        doThrow(new IOException("Mocked Exception")).when(response).sendRedirect(anyString());
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> oidcAuthenticationHandler.requestCredentials(request, response));
-        assertEquals("java.io.IOException: Mocked Exception", exception.getMessage());
+    }
+
+    @Test
+    void requestCredentialsDefaultConnectionWithPkce() {
+        //This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(new String[]{"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[]{"access_type=offline"},
+                oidcProviderMetadataRegistry)
+        );
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+
+        MockResponse mockResponse = new MockResponse();
+
+        when(config.pkceEnabled()).thenReturn(true);
+        when(config.path()).thenReturn(new String[] {"/"});
+
+        when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1%7C"+MOCK_OIDC_PARAM);
+        when(request.getRequestURI()).thenReturn("http://localhost");
+
+        createOidcAuthenticationHandler();
+        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_CODE_VERIFIER.equals(cookie.getName())) {
+                String cookieValue = cookie.getValue();
+                assertNotNull(cookieValue);
+                assertTrue(mockResponse.getSendRedirect().contains("code_challenge="));
+                return true;
+            }
+            return false;
+        }));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+                return true;
+            }
+            return false;
+        }));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_NONCE.equals(cookie.getName())) {
+                return true;
+            }
+            return false;
+        }));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_REDIRECT_URI.equals(cookie.getName())) {
+                String cookieValue = cookie.getValue();
+                assertNotNull(cookieValue);
+                assertEquals("http://localhost", cookieValue);
+                return true;
+            }
+            return false;
+        }));
     }
 
     @Test
@@ -863,39 +1112,62 @@ class OidcAuthenticationHandlerTest {
         when(request.getRequestURL()).thenReturn(new StringBuffer("http://localhost:8080"));
         when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
         when(request.getCookies()).thenReturn(null);
-        when(config.defaultRedirect()).thenReturn("http://localhost:8080");
 
         createOidcAuthenticationHandler();
         AuthenticationInfo authInfo = new AuthenticationInfo("oidc", "testUser");
         OidcAuthCredentials credentials = new OidcAuthCredentials("testUser", "oidc");
         credentials.setAttribute(".token", "testToken");
         authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
-        assertTrue(oidcAuthenticationHandler.authenticationSucceeded(request, mockResponse, authInfo ));
-        assertEquals("http://localhost:8080", mockResponse.getSendRedirect() );
-    }
 
-    @Test
-    void authenticationSucceededLoginManagerWithNoLoginCookieWithRedirect() throws IOException {
-        when(loginCookieManager.getLoginCookie(request)).thenReturn(null);
-        MockResponse mockResponse = new MockResponse();
         MockRequest mockRequest = new MockRequest();
-        mockRequest.setAttribute(OidcAuthenticationHandler.REDIRECT_ATTRIBUTE_NAME, "http://localhost:8080/redirect");
+        mockRequest.addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REDIRECT_URI, "http://localhost:8080"));
 
-        when(config.defaultRedirect()).thenReturn("http://localhost:8080");
-
+        when(config.pkceEnabled()).thenReturn(true);
         createOidcAuthenticationHandler();
-        AuthenticationInfo authInfo = new AuthenticationInfo("oidc", "testUser");
-        OidcAuthCredentials credentials = new OidcAuthCredentials("testUser", "oidc");
-        credentials.setAttribute(".token", "testToken");
-        authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
-        assertTrue(oidcAuthenticationHandler.authenticationSucceeded(mockRequest, mockResponse, authInfo ));
-        assertEquals("http://localhost:8080/redirect", mockResponse.getSendRedirect() );
 
-        //Test the IOException on response
-        HttpServletResponse mockExceptionResponse = mock(HttpServletResponse.class);
-        doThrow(new IOException("Mocked Exception")).when(mockExceptionResponse).sendRedirect(anyString());
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> oidcAuthenticationHandler.authenticationSucceeded(mockRequest, mockExceptionResponse, authInfo));
-        assertEquals("java.io.IOException: Mocked Exception", exception.getMessage());
+        assertTrue(oidcAuthenticationHandler.authenticationSucceeded(mockRequest, mockResponse, authInfo ));
+        assertEquals("http://localhost:8080", mockResponse.getSendRedirect() );
+
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+                int maxAge = cookie.getMaxAge();
+                assertEquals(0, maxAge);
+                return true;
+            }
+            return false;
+        }));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_NONCE.equals(cookie.getName())) {
+                int maxAge = cookie.getMaxAge();
+                assertEquals(0, maxAge);
+                return true;
+            }
+            return false;
+        }));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_REDIRECT_URI.equals(cookie.getName())) {
+                int maxAge = cookie.getMaxAge();
+                assertEquals(0, maxAge);
+                return true;
+            }
+            return false;
+        }));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_CODE_VERIFIER.equals(cookie.getName())) {
+                int maxAge = cookie.getMaxAge();
+                assertEquals(0, maxAge);
+                return true;
+            }
+            return false;
+        }));
+        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+            if (OAuthStateManager.COOKIE_NAME_NONCE.equals(cookie.getName())) {
+                int maxAge = cookie.getMaxAge();
+                assertEquals(0, maxAge);
+                return true;
+            }
+            return false;
+        }));
 
     }
 

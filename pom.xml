@@ -221,9 +221,9 @@
                                 <repositoryUrl>file://${project.build.directory}/artifacts</repositoryUrl>
                             </repositoryUrls>
                             <launcherArguments>
-                                <vm-options>
+                                <!-- <vm-options>
                                     <value>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:3007</value>
-                                </vm-options>
+                                </vm-options> -->
                                 <frameworkProperties>
                                     <org.osgi.service.http.port>${http.port}</org.osgi.service.http.port>
                                 </frameworkProperties>
@@ -243,6 +243,16 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.rat</groupId>
+                <artifactId>apache-rat-plugin</artifactId>
+                <version>0.14</version>
+                <configuration>
+                    <excludes>
+                        <exclude>keycloak-data/**</exclude>
+                    </excludes>
+                </configuration>
             </plugin>
 		</plugins>
 	</build>

@@ -310,9 +310,12 @@ Now you can
 #### Use existing test files
 
 Note that this imports the test setup with a single user with a _redirect_uri_ set to _http://localhost*_, which can be a security issue.
+If you plan to export the configuration, store the keycloak database in a volume. In the following examples we will use the directory `keycloak-data` for the h2 database
+and for the export directory.
 
 ```
-$ docker run --rm  --volume $(pwd)/src/test/resources/keycloak-import:/opt/keycloak/data/import -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0.3 start-dev --import-realm
+$ mkdir -p keycloak-data/h2
+$ docker run --rm  --volume $(pwd)/src/test/resources/keycloak-import:/opt/keycloak/data/import --volume $(pwd)/keycloak-data/h2:/opt/keycloak/data/h2 -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0.3 start-dev --import-realm
 ```
 
 #### Manual setup
@@ -358,11 +361,11 @@ $ docker run --rm --volume $(pwd)/keycloak-data:/opt/keycloak/data -p 8081:8080 
 
 Create a directory to store the exported realm
 ```
-mkdir $(pwd)/keycloak-data/export
+mkdir -p $(pwd)/keycloak-data/export
 ```
 Export the realm:
 ```
-$ docker run --rm --volume $(pwd)/keycloak-data:/opt/keycloak/data -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0.3 export --realm sling --users realm_file --file /opt/keycloak/data/export/sling.json
+$ docker run --rm  --volume $(pwd)/src/test/resources/keycloak-import:/opt/keycloak/data/import --volume $(pwd)/keycloak-data/h2:/opt/keycloak/data/h2 --volume $(pwd)/keycloak-data/export:/opt/keycloak/data/export -p 8082:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0.3 export --realm sling --users realm_file --file /opt/keycloak/data/export/sling.json
 ```
 
 ### Future plans

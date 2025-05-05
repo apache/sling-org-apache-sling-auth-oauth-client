@@ -18,6 +18,7 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -57,44 +58,50 @@ public class OidcConnectionImpl implements ClientConnection {
     public @NotNull String name() {
         return cfg.name();
     }
-
-    public String baseUrl() {
-        return cfg.baseUrl();
-    }
-
-    public String authorizationEndpoint() {
+    
+    @Override
+    public @NotNull String authorizationEndpoint() {
         return metadataRegistry.getAuthorizationEndpoint(cfg.baseUrl()).toString();
     }
     
-    public String tokenEndpoint() {
+    @Override
+    public @NotNull String tokenEndpoint() {
         return metadataRegistry.getTokenEndpoint(cfg.baseUrl()).toString();
     }
-
-    public URI jwkSetURL() {
-        return metadataRegistry.getJWKSetURI(cfg.baseUrl());
-    }
     
-    public String clientId() {
+    @Override
+    public @NotNull String clientId() {
         return cfg.clientId();
     }
 
-    public String clientSecret() {
+    @Override
+    public @Nullable String clientSecret() {
         return cfg.clientSecret();
     }
-
-    public String userInfoUrl() {
-        return metadataRegistry.getUserInfoEndpoint(cfg.baseUrl()).toString();
-    }
-
-    public String[] scopes() {
+    
+    @Override
+    public @NotNull String[] scopes() {
         return cfg.scopes();
     }
 
-    public String[] additionalAuthorizationParameters() {
+    @Override
+    public @NotNull String[] additionalAuthorizationParameters() {
         return cfg.additionalAuthorizationParameters();
     }
 
-    public String issuer() {
+    @Nullable String baseUrl() {
+        return cfg.baseUrl();
+    }
+
+    @NotNull String userInfoUrl() {
+        return metadataRegistry.getUserInfoEndpoint(cfg.baseUrl()).toString();
+    }
+
+    @NotNull URI jwkSetURL() {
+        return metadataRegistry.getJWKSetURI(cfg.baseUrl());
+    }
+
+    @NotNull String issuer() {
         return metadataRegistry.getIssuer(cfg.baseUrl());
     }
 }

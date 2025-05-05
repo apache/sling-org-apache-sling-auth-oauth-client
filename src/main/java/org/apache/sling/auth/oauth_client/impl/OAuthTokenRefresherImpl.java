@@ -50,7 +50,7 @@ public class OAuthTokenRefresherImpl implements OAuthTokenRefresher {
              RefreshToken refreshToken = new RefreshToken(refreshTokenString);
              AuthorizationGrant refreshTokenGrant = new RefreshTokenGrant(refreshToken);
              
-             ResolvedOAuthConnection conn = ResolvedOAuthConnection.resolve(connection);
+             ResolvedConnection conn = ResolvedOAuthConnection.resolve(connection);
             
              // The credentials to authenticate the client at the token endpoint
              ClientID clientID = new ClientID(conn.clientId());

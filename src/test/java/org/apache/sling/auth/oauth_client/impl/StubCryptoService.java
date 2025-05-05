@@ -21,16 +21,17 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import java.util.Base64;
 
 import org.apache.sling.commons.crypto.CryptoService;
+import org.jetbrains.annotations.NotNull;
 
 class StubCryptoService implements CryptoService {
 
     @Override
-    public String encrypt(String plainText) {
+    public @NotNull String encrypt(@NotNull String plainText) {
         return Base64.getEncoder().encodeToString(plainText.getBytes(UTF_8));
     }
 
     @Override
-    public String decrypt(String cipherText) {
+    public @NotNull String decrypt(@NotNull String cipherText) {
         return new String(Base64.getDecoder().decode(cipherText), UTF_8);
     }
 

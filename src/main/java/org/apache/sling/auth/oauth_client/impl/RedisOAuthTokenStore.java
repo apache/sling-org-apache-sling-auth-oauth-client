@@ -36,7 +36,7 @@ import redis.clients.jedis.JedisPool;
 public class RedisOAuthTokenStore implements OAuthTokenStore {
     
     @ObjectClassDefinition(name = "Redis OAuth Token Store")
-    static @interface Config {
+    @interface Config {
         @AttributeDefinition(name = "Redis URL")
         String redisUrl();
     }

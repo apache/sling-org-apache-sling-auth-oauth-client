@@ -35,13 +35,13 @@ import org.apache.sling.api.servlets.SlingAllMethodsServlet;
 import org.apache.sling.auth.core.AuthConstants;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.servlets.annotations.SlingServletPaths;
+import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.nimbusds.oauth2.sdk.id.ClientID;
 import com.nimbusds.oauth2.sdk.id.Identifier;
 import com.nimbusds.oauth2.sdk.id.State;
 
@@ -52,7 +52,6 @@ import com.nimbusds.oauth2.sdk.id.State;
 public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
 
     private static final long serialVersionUID = 1L;
-
 
     public static final String PATH = "/system/sling/oauth/entry-point"; // NOSONAR
     
@@ -70,7 +69,7 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
     }
 
     @Override
-    protected void doGet(SlingHttpServletRequest request, SlingHttpServletResponse response)
+    protected void doGet(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
             throws ServletException, IOException {
         
         try {
@@ -91,25 +90,28 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
             }
                 
             var redirect = getAuthenticationRequestUri(connection, request, URI.create(OAuthCallbackServlet.getCallbackUri(request)));
-            response.addCookie(redirect.cookies()[0]);
-            response.sendRedirect(redirect.uri().toString());
+            if (!redirect.cookies().isEmpty()) {
+                response.addCookie(redirect.cookies().get(0));
+            } else {
+                logger.warn("No cookies available in the redirect target.");
+            }            response.sendRedirect(redirect.uri().toString());
         } catch (Exception e) {
             throw new OAuthEntryPointException("Internal error", e);
         }
     }
     
-    private RedirectTarget getAuthenticationRequestUri(ClientConnection connection, SlingHttpServletRequest request, URI redirectUri) {
-        
-        ResolvedOAuthConnection conn = ResolvedOAuthConnection.resolve(connection);
+    private @NotNull RedirectTarget getAuthenticationRequestUri(@NotNull ClientConnection connection, 
+                                                                @NotNull SlingHttpServletRequest request, 
+                                                                @NotNull URI redirectUri) {
+        ResolvedConnection conn = ResolvedOAuthConnection.resolve(connection);
 
         // The client ID provisioned by the OpenID provider when
-        // the client was registered
-        ClientID clientID = new ClientID(conn.clientId());
+        // the client was registered. It is stored in the connection.
 
         String redirect = request.getParameter(OAuthStateManager.PARAMETER_NAME_REDIRECT);
         String perRequestKey = new Identifier().getValue();
         State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect, null));
 
-        return RedirectHelper.buildRedirectTarget(clientID, conn.authorizationEndpoint(), conn.scopes(), conn.additionalAuthorizationParameters(), state, perRequestKey, redirectUri, false, null);
+        return RedirectHelper.buildRedirectTarget(new String[]{PATH}, null, conn, state, perRequestKey, redirectUri, false, null);
     }
 }

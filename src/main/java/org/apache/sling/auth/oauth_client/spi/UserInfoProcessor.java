@@ -17,8 +17,6 @@
  */
 package org.apache.sling.auth.oauth_client.spi;
 
-import com.nimbusds.oauth2.sdk.TokenResponse;
-import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -26,6 +24,6 @@ import org.jetbrains.annotations.Nullable;
  * Process the user info received from the identity provider and return the credentials that will be returned by the authentication handler.
  */
 public interface UserInfoProcessor {
-    @NotNull OidcAuthCredentials process(@Nullable UserInfo userInfo, @NotNull TokenResponse tokenResponse,
+    @NotNull OidcAuthCredentials process(@Nullable String userInfo, @NotNull String tokenResponse,
                                          @NotNull String oidcSubject, @NotNull String idp);
 }
