@@ -109,7 +109,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         }
         //Store the Access Token on user node
         String accessToken = tokens.accessToken();
-        if (accessToken != null) {
+        if (storeAccessToken && accessToken != null) {
             credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, cryptoService.encrypt(accessToken));
         } else {
             logger.debug("Access Token is null, omit adding as credentials attribute '{}'", OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN);
@@ -117,7 +117,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
 
         //Store the Refresh Token on user node
         String refreshToken = tokens.accessToken();
-        if (refreshToken != null) {
+        if (storeRefreshToken && refreshToken != null) {
             credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, cryptoService.encrypt(refreshToken));
         } else {
             logger.debug("Refresh Token is null, omit adding as credentials attribute '{}'", OAuthTokenStore.PROPERTY_NAME_REFRESH_TOKEN);

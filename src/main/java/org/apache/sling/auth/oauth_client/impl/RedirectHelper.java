@@ -29,6 +29,7 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.servlet.http.Cookie;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -47,7 +48,12 @@ class RedirectHelper {
                                                        @Nullable List<String> additionalAuthorizationParameters, @NotNull State state,
                                                        @NotNull String perRequestKey, @NotNull URI redirectUri, boolean pkceEnabled, @Nullable String nonce) {
 
-        String path = findLongestPathMatching(paths, originaRedirectTarget);
+        String path = null;
+        try {
+            path = findLongestPathMatching(paths, new URI(originaRedirectTarget).getPath());
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
         ArrayList<Cookie> cookies = new ArrayList<>();
         Cookie requestKeyCookie = buildCookie(path, OAuthStateManager.COOKIE_NAME_REQUEST_KEY, perRequestKey);
         cookies.add(requestKeyCookie);
@@ -113,7 +119,7 @@ class RedirectHelper {
             return null;
         }
 
-        if (url == null && path.length ==1) {
+        if ((url == null || url.isEmpty()) && path.length == 1) {
             return path[0];
         }
 

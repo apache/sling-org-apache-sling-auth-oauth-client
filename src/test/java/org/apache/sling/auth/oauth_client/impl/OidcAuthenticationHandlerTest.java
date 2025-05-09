@@ -48,6 +48,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -89,6 +90,7 @@ class OidcAuthenticationHandlerTest {
         config = mock(OidcAuthenticationHandler.Config.class);
         when(config.idp()).thenReturn("myIdP");
         when(config.checkNonce()).thenReturn(true);
+        when(config.path()).thenReturn(new String[]{"/"});
         loginCookieManager = mock(LoginCookieManager.class);
 
         SlingUserInfoProcessorImpl.Config userInfoConfig = mock(SlingUserInfoProcessorImpl.Config.class);
@@ -446,6 +448,8 @@ class OidcAuthenticationHandlerTest {
         when(nonceCookie.getValue()).thenReturn("invalidNonce");
 
         when(config.checkNonce()).thenReturn(false);
+        when(config.path()).thenReturn(new String[]{"/"});
+        when(request.getRequestURI()).thenReturn("http://localhost:8080");
         AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(createIdToken(rsaJWK, "client-id", ISSUER), rsaJWK, "http://localhost:4567", new Cookie[] {stateCookie, nonceCookie} );
         assertEquals("1234567890", authInfo.get("user.name"));
         assertEquals("testUser", ((OidcAuthCredentials)authInfo.get("user.jcr.credentials")).getAttribute("profile/name"));
@@ -789,7 +793,7 @@ class OidcAuthenticationHandlerTest {
     }
 
     @Test
-    void requestCredentialsDefaultConnectionIOException() throws IOException {
+    void requestCredentialsDefaultConnectionIOException() throws IOException, URISyntaxException {
 
         //This is the class used by Sling to configure the Authentication Handler
         OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
@@ -811,11 +815,13 @@ class OidcAuthenticationHandlerTest {
         when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
         when(config.callbackUri()).thenReturn("http://redirect");
         when(config.pkceEnabled()).thenReturn(false);
+        when(config.path()).thenReturn(new String[]{"/"});
 
         createOidcAuthenticationHandler();
 
         // Test the Exception on response
         response = mock(HttpServletResponse.class);
+        when(request.getRequestURI()).thenReturn("http://localhost:8080");
         //mock to trow an exception when response.sendRedirect is called
         doThrow(new IOException("Mocked Exception")).when(response).sendRedirect(anyString());
         RuntimeException exception = assertThrows(RuntimeException.class, () -> oidcAuthenticationHandler.requestCredentials(request, response));
@@ -979,6 +985,7 @@ class OidcAuthenticationHandlerTest {
         MockResponse mockResponse = new MockResponse();
 
         when(config.pkceEnabled()).thenReturn(true);
+        when(config.path()).thenReturn(new String[] {"/"});
 
         when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1%7C"+MOCK_OIDC_PARAM);
         when(request.getRequestURI()).thenReturn("http://localhost");
