@@ -19,4 +19,4 @@ package org.apache.sling.auth.oauth_client.impl;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public record OAuthState(@NotNull String perRequestKey, @NotNull String connectionName, @Nullable String redirect) {}
+public record OAuthState(@NotNull String perRequestKey, @NotNull String connectionName, @Nullable String redirect, @Nullable String nonce) {}

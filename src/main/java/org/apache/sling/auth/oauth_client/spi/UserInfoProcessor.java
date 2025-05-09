@@ -26,6 +26,6 @@ import org.jetbrains.annotations.Nullable;
  * Process the user info received from the identity provider and return the credentials that will be returned by the authentication handler.
  */
 public interface UserInfoProcessor {
-    @NotNull OidcAuthCredentials process(@Nullable UserInfo userInfo, @NotNull TokenResponse tokenResponse, 
+    @NotNull OidcAuthCredentials process(@Nullable UserInfo userInfo, @NotNull TokenResponse tokenResponse,
                                          @NotNull String oidcSubject, @NotNull String idp);
 }

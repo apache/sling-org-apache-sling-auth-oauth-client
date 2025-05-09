@@ -244,6 +244,16 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.rat</groupId>
+                <artifactId>apache-rat-plugin</artifactId>
+                <version>0.14</version>
+                <configuration>
+                    <excludes>
+                        <exclude>keycloak-data/**</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
 		</plugins>
 	</build>
 	<dependencies>
@@ -304,7 +314,7 @@
         <dependency>
             <groupId>com.nimbusds</groupId>
             <artifactId>oauth2-oidc-sdk</artifactId>
-            <version>11.19</version>
+            <version>11.23.1</version>
             <scope>provided</scope>
         </dependency>
         <!-- Redis persistence support-->

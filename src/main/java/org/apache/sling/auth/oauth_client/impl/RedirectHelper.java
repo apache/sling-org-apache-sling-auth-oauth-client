@@ -16,16 +16,21 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
-import com.nimbusds.oauth2.sdk.AuthorizationRequest;
 import com.nimbusds.oauth2.sdk.ResponseType;
 import com.nimbusds.oauth2.sdk.Scope;
 import com.nimbusds.oauth2.sdk.id.ClientID;
 import com.nimbusds.oauth2.sdk.id.State;
+import com.nimbusds.oauth2.sdk.pkce.CodeChallengeMethod;
+import com.nimbusds.oauth2.sdk.pkce.CodeVerifier;
+import com.nimbusds.openid.connect.sdk.AuthenticationRequest;
+import com.nimbusds.openid.connect.sdk.Nonce;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.servlet.http.Cookie;
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.List;
 
 class RedirectHelper {
@@ -39,34 +44,106 @@ class RedirectHelper {
         // Utility class
     }
     
-    static @NotNull RedirectTarget buildRedirectTarget(@NotNull ClientID clientID, @NotNull String authorizationEndpoint, @NotNull List<String> scopes,
-                                        @Nullable List<String> additionalAuthorizationParameters, @NotNull State state,
-                                        @NotNull String perRequestKey, @NotNull URI redirectUri) {
+    static @NotNull RedirectTarget buildRedirectTarget(@NotNull String[] paths, @Nullable String originaRedirectTarget, @NotNull ClientID clientID, @NotNull String authorizationEndpoint, @NotNull List<String> scopes,
+                                                       @Nullable List<String> additionalAuthorizationParameters, @NotNull State state,
+                                                       @NotNull String perRequestKey, @NotNull URI redirectUri, boolean pkceEnabled, @Nullable String nonce) {
+
+        String path = null;
+        if (originaRedirectTarget != null) {
+            path = findLongestPathMatching(paths, originaRedirectTarget);
+        }
+
+        ArrayList<Cookie> cookies = new ArrayList<>();
+        Cookie requestKeyCookie = buildCookie(path, OAuthStateManager.COOKIE_NAME_REQUEST_KEY, perRequestKey);
+        cookies.add(requestKeyCookie);
+
+        //-----------------
         URI authorizationEndpointUri = URI.create(authorizationEndpoint);
+
         // Compose the OpenID authentication request (for the code flow)
-        AuthorizationRequest.Builder authRequestBuilder = new AuthorizationRequest.Builder(
+        AuthenticationRequest.Builder authRequestBuilder = new AuthenticationRequest.Builder(
                 ResponseType.CODE,
-                clientID)
-                .scope(new Scope(scopes.toArray(new String[0])))
-                .endpointURI(authorizationEndpointUri)
-                .redirectionURI(redirectUri)
-                .state(state);
+                new Scope(scopes.toArray(new String[scopes.size()])),
+                clientID,
+                redirectUri
+        )
+        .endpointURI(authorizationEndpointUri)
+        .state(state);
+
+        if (nonce != null) {
+            Cookie nonceCookie = buildCookie(path, OAuthStateManager.COOKIE_NAME_NONCE, nonce);
+            cookies.add(nonceCookie);
+
+            authRequestBuilder.nonce(new Nonce(nonce));
+
+        }
+
+        if (pkceEnabled) {
+            // Generate a new random 256 bit code verifier for PKCE
+            CodeVerifier codeVerifier = new CodeVerifier();
+
+            authRequestBuilder.codeChallenge(codeVerifier, CodeChallengeMethod.S256);
+
+            Cookie codeVerifierCookie = buildCookie(path, OAuthStateManager.COOKIE_NAME_CODE_VERIFIER, codeVerifier.getValue());
+            cookies.add(codeVerifierCookie);
+        }
+
+        if (originaRedirectTarget != null) {
+            Cookie redirectCookie = buildCookie(path, OAuthStateManager.COOKIE_NAME_REDIRECT_URI, originaRedirectTarget);
+            cookies.add(redirectCookie);
+        }
 
         if (additionalAuthorizationParameters != null) {
             additionalAuthorizationParameters.stream()
-                    .map( s -> s.split("=") )
-                    .filter( p -> p.length == 2 )
-                    .forEach( p -> authRequestBuilder.customParameter(p[0], p[1]));
+                    .map(s -> s.split("="))
+                    .filter(p -> p.length == 2)
+                    .forEach(p -> authRequestBuilder.customParameter(p[0], p[1]));
         }
         URI uri = authRequestBuilder.build().toURI();
-        return new RedirectTarget(uri, buildCookie(perRequestKey));
+        return new RedirectTarget(uri, cookies.toArray(new Cookie[cookies.size()]));
     }
+
     
-    private static @NotNull Cookie buildCookie(@NotNull String perRequestKey) {
-        Cookie cookie = new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, perRequestKey);
+    private static @NotNull Cookie buildCookie(@Nullable String path, @NotNull String name, @NotNull String perRequestKey) {
+        Cookie cookie = new Cookie(name, perRequestKey);
         cookie.setHttpOnly(true);
         cookie.setSecure(true);
         cookie.setMaxAge(COOKIE_MAX_AGE_SECONDS);
+        if (path !=null)
+            cookie.setPath(path);
         return cookie;
     }
+
+    public static String findLongestPathMatching(@NotNull String[] path,@Nullable String url) {
+
+        if (url == null || url.isEmpty()) {
+            return null;
+        }
+
+        String urlPath= null;
+        try {
+            urlPath = new URI(url).getPath();
+        } catch (URISyntaxException e) {
+            throw null;
+        }
+
+        if (path == null || path.length == 0) {
+            return null;
+        }
+
+        if ((urlPath == null || urlPath.isEmpty()) && path.length == 1) {
+            return path[0];
+        }
+
+        String longestPath = null;
+        for (String p : path) {
+            if (urlPath.startsWith(p)) {
+                if (longestPath == null || p.length() > longestPath.length()) {
+                    longestPath = p;
+                }
+            }
+        }
+        return longestPath;
+    }
+
 }

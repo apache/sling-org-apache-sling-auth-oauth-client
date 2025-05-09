@@ -21,6 +21,6 @@ import org.jetbrains.annotations.NotNull;
 import javax.servlet.http.Cookie;
 import java.net.URI;
 
-record RedirectTarget(@NotNull URI uri, @NotNull Cookie cookie) {
+record RedirectTarget(@NotNull URI uri, @NotNull Cookie[] cookies) {
     
 }

@@ -22,9 +22,16 @@ import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 import net.minidev.json.JSONArray;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
+import org.apache.sling.commons.crypto.CryptoService;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferencePolicyOption;
+import org.osgi.service.metatype.annotations.AttributeDefinition;
+import org.osgi.service.metatype.annotations.Designate;
+import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,9 +42,39 @@ import org.slf4j.LoggerFactory;
                 "service.ranking:Integer=10"
         }
 )
-public class UserInfoProcessorImpl implements UserInfoProcessor {
 
-    Logger logger = LoggerFactory.getLogger(UserInfoProcessorImpl.class);
+@Designate(ocd = SlingUserInfoProcessorImpl.Config.class)
+public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
+
+    boolean storeAccessToken;
+    boolean storeRefreshToken;
+    @ObjectClassDefinition(
+            name = "Apache Sling Oidc UserInfo Processor",
+            description = "Apache Sling Oidc UserInfo Processor Service"
+    )
+    @interface Config {
+        @AttributeDefinition(
+                name = "storeAccessToken",
+                description = "Store access Token under User Node"
+        )
+        boolean storeAccessToken() default false;
+        @AttributeDefinition(
+                name = "storeRefreshToken",
+                description = "Store access Refresh under User Node"
+        )
+        boolean storeRefreshToken() default false;
+    }
+
+    @Activate
+    public SlingUserInfoProcessorImpl(@Reference(policyOption = ReferencePolicyOption.GREEDY) CryptoService service, Config config) {
+        this.cryptoService = service;
+        this.storeAccessToken = config.storeAccessToken();
+        this.storeRefreshToken = config.storeRefreshToken();
+
+    }
+    Logger logger = LoggerFactory.getLogger(SlingUserInfoProcessorImpl.class);
+
+    CryptoService cryptoService;
 
     @Override
     public @NotNull OidcAuthCredentials process(@Nullable UserInfo userInfo, @NotNull TokenResponse tokenResponse, 
@@ -72,11 +109,20 @@ public class UserInfoProcessorImpl implements UserInfoProcessor {
         }
         //Store the Access Token on user node
         String accessToken = tokens.accessToken();
-        if (accessToken != null) {
-            credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, tokens.accessToken());
+        if (storeAccessToken && accessToken != null) {
+            credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, cryptoService.encrypt(accessToken));
         } else {
             logger.debug("Access Token is null, omit adding as credentials attribute '{}'", OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN);
         }
+
+        //Store the Refresh Token on user node
+        String refreshToken = tokens.accessToken();
+        if (storeRefreshToken && refreshToken != null) {
+            credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_ACCESS_TOKEN, cryptoService.encrypt(refreshToken));
+        } else {
+            logger.debug("Refresh Token is null, omit adding as credentials attribute '{}'", OAuthTokenStore.PROPERTY_NAME_REFRESH_TOKEN);
+        }
+
         return credentials;
     }
 
