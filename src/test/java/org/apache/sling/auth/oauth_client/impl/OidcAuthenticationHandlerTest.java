@@ -107,7 +107,7 @@ class OidcAuthenticationHandlerTest {
         tokenEndpointServer.stop(0);
         idpServer.stop(0);
     }
-    
+
     @Test
     void extractCredentialsWithoutAnyParameter() {
         // The authentication Handler MUST return null to allow other Authentication Handlers to process the request
@@ -260,7 +260,7 @@ class OidcAuthenticationHandlerTest {
         createOidcAuthenticationHandler();
 
         RuntimeException exception = assertThrows(RuntimeException.class, () -> oidcAuthenticationHandler.extractCredentials(request, response));
-        assertEquals("Invalid JSON: Unexpected End Of File position 8: null", exception.getMessage());
+        assertEquals("Invalid JSON", exception.getMessage());
 
     }
 
@@ -550,7 +550,7 @@ class OidcAuthenticationHandlerTest {
         userInfoProcessor = new UserInfoProcessorImpl();
         //Test with an id token signed by another key, and expired
         RuntimeException exception = assertThrows(RuntimeException.class, () -> oidcAuthenticationHandler.extractCredentials(request, response));
-        assertEquals("com.nimbusds.oauth2.sdk.ParseException: Couldn't parse UserInfo claims: Invalid JSON: Unexpected token this is an error at position 17.", exception.getMessage());
+        assertEquals("com.nimbusds.oauth2.sdk.ParseException: Couldn't parse UserInfo claims: Invalid JSON", exception.getMessage());
     }
 
 
@@ -583,7 +583,7 @@ class OidcAuthenticationHandlerTest {
         // Serialize the JWT to a compact form
         return signedJWT.serialize();
     }
-    
+
     private AuthenticationInfo extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(String idToken, RSAKey rsaJWK, String baseUrl) {
         idpServer.createContext("/token", exchange -> {
                     exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -717,6 +717,7 @@ class OidcAuthenticationHandlerTest {
 
         when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
         when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
 
         MockResponse mockResponse = new MockResponse();
 

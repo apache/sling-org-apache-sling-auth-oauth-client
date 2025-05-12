@@ -35,7 +35,7 @@ public class RedirectTarget {
         return uri;
     }
 
-    public @NotNull Cookie cookie() {
+    public @NotNull Cookie cookies() {
         return cookie;
     }
 }

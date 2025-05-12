@@ -21,11 +21,14 @@ import com.nimbusds.oauth2.sdk.ResponseType;
 import com.nimbusds.oauth2.sdk.Scope;
 import com.nimbusds.oauth2.sdk.id.ClientID;
 import com.nimbusds.oauth2.sdk.id.State;
+import com.nimbusds.oauth2.sdk.pkce.CodeChallengeMethod;
+import com.nimbusds.oauth2.sdk.pkce.CodeVerifier;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.servlet.http.Cookie;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 
 class RedirectHelper {
@@ -40,33 +43,57 @@ class RedirectHelper {
     }
     
     static @NotNull RedirectTarget buildRedirectTarget(@NotNull ClientID clientID, @NotNull String authorizationEndpoint, @NotNull List<String> scopes,
-                                        @Nullable List<String> additionalAuthorizationParameters, @NotNull State state,
-                                        @NotNull String perRequestKey, @NotNull URI redirectUri) {
-        URI authorizationEndpointUri = URI.create(authorizationEndpoint);
-        // Compose the OpenID authentication request (for the code flow)
-        AuthorizationRequest.Builder authRequestBuilder = new AuthorizationRequest.Builder(
-                ResponseType.CODE,
-                clientID)
-                .scope(new Scope(scopes.toArray(new String[0])))
-                .endpointURI(authorizationEndpointUri)
-                .redirectionURI(redirectUri)
-                .state(state);
+                                                       @Nullable List<String> additionalAuthorizationParameters, @NotNull State state,
+                                                       @NotNull String perRequestKey, @NotNull URI redirectUri, boolean pkceEnabled) {
 
+        ArrayList<Cookie> cookies = new ArrayList<>();
+        Cookie requestKeyCookie = buildCookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, perRequestKey);
+        cookies.add(requestKeyCookie);
+
+        //-----------------
+        URI authorizationEndpointUri = URI.create(authorizationEndpoint);
+        AuthorizationRequest.Builder authRequestBuilder;
+        if (pkceEnabled) {
+            // Generate a new random 256 bit code verifier for PKCE
+            CodeVerifier codeVerifier = new CodeVerifier();
+
+            authRequestBuilder = new AuthorizationRequest.Builder(
+                    new ResponseType("code"),
+                    clientID)
+                    .endpointURI(authorizationEndpointUri)
+                    .redirectionURI(redirectUri)
+                    .scope(new Scope(scopes.toArray(new String[0])))
+                    .state(state)
+                    .codeChallenge(codeVerifier, CodeChallengeMethod.S256);
+            Cookie codeVerifierCookie = buildCookie(OAuthStateManager.COOKIE_NAME_CODE_VERIFIER, codeVerifier.getValue());
+            cookies.add(codeVerifierCookie);
+        } else {
+            // Compose the OpenID authentication request (for the code flow)
+            authRequestBuilder = new AuthorizationRequest.Builder(
+                    ResponseType.CODE,
+                    clientID)
+                    .scope(new Scope(scopes.toArray(new String[0])))
+                    .endpointURI(authorizationEndpointUri)
+                    .redirectionURI(redirectUri)
+                    .state(state);
+        }
         if (additionalAuthorizationParameters != null) {
             additionalAuthorizationParameters.stream()
-                    .map( s -> s.split("=") )
-                    .filter( p -> p.length == 2 )
-                    .forEach( p -> authRequestBuilder.customParameter(p[0], p[1]));
+                    .map(s -> s.split("="))
+                    .filter(p -> p.length == 2)
+                    .forEach(p -> authRequestBuilder.customParameter(p[0], p[1]));
         }
         URI uri = authRequestBuilder.build().toURI();
-        return new RedirectTarget(uri, buildCookie(perRequestKey));
+        return new RedirectTarget(uri, cookies.toArray(new Cookie[cookies.size()]));
     }
+
     
-    private static @NotNull Cookie buildCookie(@NotNull String perRequestKey) {
-        Cookie cookie = new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, perRequestKey);
+    private static @NotNull Cookie buildCookie(@NotNull String name, @NotNull String perRequestKey) {
+        Cookie cookie = new Cookie(name, perRequestKey);
         cookie.setHttpOnly(true);
         cookie.setSecure(true);
         cookie.setMaxAge(COOKIE_MAX_AGE_SECONDS);
         return cookie;
     }
+
 }

@@ -91,7 +91,7 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
             }
                 
             var redirect = getAuthenticationRequestUri(connection, request, URI.create(OAuthCallbackServlet.getCallbackUri(request)));
-            response.addCookie(redirect.cookie());
+            response.addCookie(redirect.cookies()[0]);
             response.sendRedirect(redirect.uri().toString());
         } catch (Exception e) {
             throw new OAuthEntryPointException("Internal error", e);
@@ -105,11 +105,11 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
         // The client ID provisioned by the OpenID provider when
         // the client was registered
         ClientID clientID = new ClientID(conn.clientId());
-        
+
         String redirect = request.getParameter(OAuthStateManager.PARAMETER_NAME_REDIRECT);
         String perRequestKey = new Identifier().getValue();
         State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect));
 
-        return RedirectHelper.buildRedirectTarget(clientID, conn.authorizationEndpoint(), conn.scopes(), conn.additionalAuthorizationParameters(), state, perRequestKey, redirectUri);
+        return RedirectHelper.buildRedirectTarget(clientID, conn.authorizationEndpoint(), conn.scopes(), conn.additionalAuthorizationParameters(), state, perRequestKey, redirectUri, false);
     }
 }
