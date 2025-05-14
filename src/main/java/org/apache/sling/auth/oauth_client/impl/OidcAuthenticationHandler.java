@@ -291,7 +291,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         return authCode.getValue();
     }
     
-    private static @NotNull TokenResponse extractTokenResponse(@NotNull String authCode, @NotNull ResolvedOidcConnection conn, 
+    private static @NotNull TokenResponse extractTokenResponse(@NotNull String authCode, @NotNull ResolvedOidcConnection conn,
                                                                @NotNull ClientSecretBasic clientCredentials, 
                                                                @NotNull String callbackUri) {
         try {
@@ -455,7 +455,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         }
 
         Object creds = authInfo.get(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS);
-        if (creds instanceof OidcAuthCredentials oidcAuthCredentials) {
+        if (creds instanceof OidcAuthCredentials) {
+            OidcAuthCredentials oidcAuthCredentials = (OidcAuthCredentials) creds;
             Object tokenValueObject = oidcAuthCredentials.getAttribute(".token");
             if (tokenValueObject != null && !tokenValueObject.toString().isEmpty()) {
                 String token = tokenValueObject.toString();

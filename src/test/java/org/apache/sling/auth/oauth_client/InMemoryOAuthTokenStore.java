@@ -35,19 +35,70 @@ import org.jetbrains.annotations.NotNull;
  * <p>This implementation exists for testing purposes only</p>
  */
 public class InMemoryOAuthTokenStore implements OAuthTokenStore {
-    
-    record Key(String connectionName, String userId) {}
 
-    record Value(OAuthTokens tokens, Instant expires) {
-        
-        public Value(OAuthTokens tokens) {
-            this(tokens, tokens.expiresAt() != 0 ? Instant.now().plusSeconds(tokens.expiresAt()) : null);
+    public static class Key {
+        private final String connectionName;
+        private final String userId;
+
+        public Key(String connectionName, String userId) {
+            this.connectionName = connectionName;
+            this.userId = userId;
         }
-        
+
+        public String getConnectionName() {
+            return connectionName;
+        }
+
+        public String getUserId() {
+            return userId;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (userId == null) {
+                return connectionName.equals(((Key) obj).connectionName);
+            }
+            if (obj instanceof Key) {
+                Key other = (Key) obj;
+                return connectionName.equals(other.connectionName) && userId.equals(other.userId);
+            }
+            return false;
+        }
+
+        @Override
+        public int hashCode() {
+            if (userId == null) {
+                return connectionName.hashCode();
+            }
+            return connectionName.hashCode() + userId.hashCode();
+        }
+    }
+
+    public static class Value {
+        private final OAuthTokens tokens;
+        private final Instant expires;
+
+        public Value(OAuthTokens tokens) {
+            this.tokens = tokens;
+            this.expires = tokens.expiresAt() != 0 ? Instant.now().plusSeconds(tokens.expiresAt()) : null;
+        }
+
+        public Value(OAuthTokens tokens, Instant expires) {
+            this.tokens = tokens;
+            this.expires = expires;
+        }
+
+        public OAuthTokens tokens() {
+            return tokens;
+        }
+
+        public Instant expires() {
+            return expires;
+        }
+
         public boolean isValid() {
             return expires == null || expires.isAfter(Instant.now());
         }
-        
     }
     
     private final Map<Key, Value> storage = new HashMap<>();

@@ -19,4 +19,49 @@ package org.apache.sling.auth.oauth_client.impl;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public record OAuthState(@NotNull String perRequestKey, @NotNull String connectionName, @Nullable String redirect) {}
+public class OAuthState {
+
+    private final @NotNull String perRequestKey;
+    private final @NotNull String connectionName;
+    private final @Nullable String redirect;
+
+    public OAuthState(@NotNull String perRequestKey, @NotNull String connectionName, @Nullable String redirect) {
+        this.perRequestKey = perRequestKey;
+        this.connectionName = connectionName;
+        this.redirect = redirect;
+    }
+
+    public @NotNull String perRequestKey() {
+        return perRequestKey;
+    }
+
+    public @NotNull String connectionName() {
+        return connectionName;
+    }
+
+    public @Nullable String redirect() {
+        return redirect;
+    }
+
+    //implement equals and hashCode
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof OAuthState)) return false;
+
+        OAuthState that = (OAuthState) o;
+
+        if (!perRequestKey.equals(that.perRequestKey)) return false;
+        if (!connectionName.equals(that.connectionName)) return false;
+        if (redirect != null ? !redirect.equals(that.redirect) : that.redirect != null) return false;
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = perRequestKey.hashCode();
+        result = 31 * result + connectionName.hashCode();
+        result = 31 * result + (redirect != null ? redirect.hashCode() : 0);
+        return result;
+    }
+}

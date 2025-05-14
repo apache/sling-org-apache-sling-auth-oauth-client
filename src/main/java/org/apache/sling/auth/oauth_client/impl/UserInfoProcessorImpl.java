@@ -57,7 +57,8 @@ public class UserInfoProcessorImpl implements UserInfoProcessor {
             logger.debug("FamilyName: {}", userInfo.getFamilyName());
 
             Object groups = userInfo.toJSONObject().remove("groups");
-            if (groups instanceof JSONArray groupJsonArray) {
+            if (groups instanceof JSONArray) {
+                JSONArray groupJsonArray = (JSONArray) groups;
                 logger.debug("Groups: {}", groups);
                 //Convert the groups in a Set of Strings
                 groupJsonArray.forEach(group -> credentials.addGroup(group.toString()));
