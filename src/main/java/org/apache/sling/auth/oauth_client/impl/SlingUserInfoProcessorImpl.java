@@ -46,12 +46,9 @@ import org.slf4j.LoggerFactory;
                 "service.ranking:Integer=10"
         }
 )
-
 @Designate(ocd = SlingUserInfoProcessorImpl.Config.class)
 public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
 
-    boolean storeAccessToken;
-    boolean storeRefreshToken;
     @ObjectClassDefinition(
             name = "Apache Sling Oidc UserInfo Processor",
             description = "Apache Sling Oidc UserInfo Processor Service"
@@ -68,39 +65,26 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         )
         boolean storeRefreshToken() default false;
     }
+    
+    private static final Logger logger = LoggerFactory.getLogger(SlingUserInfoProcessorImpl.class);
+
+    private final CryptoService cryptoService;
+    private final boolean storeAccessToken;
+    private final boolean storeRefreshToken;
 
     @Activate
     public SlingUserInfoProcessorImpl(@Reference(policyOption = ReferencePolicyOption.GREEDY) CryptoService service, Config config) {
         this.cryptoService = service;
         this.storeAccessToken = config.storeAccessToken();
         this.storeRefreshToken = config.storeRefreshToken();
-
     }
-    Logger logger = LoggerFactory.getLogger(SlingUserInfoProcessorImpl.class);
-
-    CryptoService cryptoService;
-
+    
     @Override
     public @NotNull OidcAuthCredentials process(@Nullable String stringUserInfo, @NotNull String stringTokenResponse,
                                                 @NotNull String oidcSubject, @NotNull String idp) {
 
-        JSONObject jsonTokenResponse = (JSONObject) JSONValue.parse(stringTokenResponse);
-        TokenResponse tokenResponse = null;
-        try {
-            tokenResponse = TokenResponse.parse(jsonTokenResponse);
-        } catch (ParseException e) {
-            throw new RuntimeException("Failed to parse TokenResponse in UserInfoProcessor", e);
-        }
-
-        UserInfo userInfo = null;
-        if (stringUserInfo != null) {
-            try {
-                userInfo = UserInfo.parse(stringUserInfo);
-            } catch (ParseException e) {
-                throw new RuntimeException("Failed to parse UserInfo in UserInfoProcessor", e);
-            }
-        }
-
+        TokenResponse tokenResponse = parseTokenResponse(stringTokenResponse);
+        UserInfo userInfo = parseUserInfo(stringUserInfo);
         OAuthTokens tokens = Converter.toSlingOAuthTokens(tokenResponse.toSuccessResponse().getTokens());
 
         // Create AuthenticationInfo object
@@ -146,5 +130,25 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         }
 
         return credentials;
+    }
+
+    private static @Nullable UserInfo parseUserInfo(@Nullable String stringUserInfo) {
+        if (stringUserInfo != null) {
+            try {
+                return UserInfo.parse(stringUserInfo);
+            } catch (ParseException e) {
+                throw new RuntimeException("Failed to parse UserInfo in UserInfoProcessor", e);
+            }
+        }
+        return null;
+    }
+
+    private static @NotNull TokenResponse parseTokenResponse(@NotNull String stringTokenResponse) {
+        try {
+            JSONObject jsonTokenResponse = (JSONObject) JSONValue.parse(stringTokenResponse);
+            return TokenResponse.parse(jsonTokenResponse);
+        } catch (ParseException e) {
+            throw new RuntimeException("Failed to parse TokenResponse in UserInfoProcessor", e);
+        }
     }
 }

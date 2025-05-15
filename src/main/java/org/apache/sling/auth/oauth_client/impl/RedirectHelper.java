@@ -62,7 +62,7 @@ class RedirectHelper {
         URI authorizationEndpointUri = URI.create(conn.authorizationEndpoint());
 
         // Compose the OpenID authentication request (for the code flow)
-        Scope scopes = new Scope(conn.scopes().toArray(new String[conn.scopes().size()]));
+        Scope scopes = new Scope(conn.scopes().toArray(new String[0]));
         AuthenticationRequest.Builder authRequestBuilder = new AuthenticationRequest.Builder(
                 ResponseType.CODE,
                 scopes,
@@ -95,12 +95,10 @@ class RedirectHelper {
             cookies.add(redirectCookie);
         }
 
-        if (conn.additionalAuthorizationParameters() != null) {
-            conn.additionalAuthorizationParameters().stream()
-                    .map(s -> s.split("="))
-                    .filter(p -> p.length == 2)
-                    .forEach(p -> authRequestBuilder.customParameter(p[0], p[1]));
-        }
+        conn.additionalAuthorizationParameters().stream()
+                .map(s -> s.split("="))
+                .filter(p -> p.length == 2)
+                .forEach(p -> authRequestBuilder.customParameter(p[0], p[1]));
         URI uri = authRequestBuilder.build().toURI();
         return new RedirectTarget(uri, cookies);
     }
@@ -116,9 +114,9 @@ class RedirectHelper {
         return cookie;
     }
 
-    public static @Nullable String findLongestPathMatching(@NotNull String[] path,@Nullable String url) {
+    static @Nullable String findLongestPathMatching(@NotNull String[] paths, @Nullable String url) {
 
-        if (url == null || url.isEmpty()) {
+        if (url == null || url.isEmpty() || paths.length == 0) {
             return null;
         }
 
@@ -130,22 +128,27 @@ class RedirectHelper {
             return null;
         }
 
-        if (path.length == 0) {
-            //This should never happen, but just in case
-            return null;
-        }
-
         if (urlPath == null || urlPath.isEmpty())  {
             return null;
         }
 
         String longestPath = null;
-        for (String p : path) {
-            if (urlPath.startsWith(p) && (longestPath == null || p.length() > longestPath.length())) {
-                    longestPath = p;
+        for (String p : paths) {
+            if (isDescendantOrEqual(p, urlPath) && (longestPath == null || p.length() > longestPath.length())) {
+                longestPath = p;
             }
         }
         return longestPath;
+    }
+
+    // copied from org.apache.jackrabbit.util.Text
+    private static boolean isDescendantOrEqual(String path, String descendant) {
+        if (path.equals(descendant)) {
+            return true;
+        } else {
+            String pattern = path.endsWith("/") ? path : path + "/";
+            return descendant.startsWith(pattern);
+        }
     }
 
 }

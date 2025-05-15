@@ -22,7 +22,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Component;
 
 import com.nimbusds.oauth2.sdk.GeneralException;
@@ -42,8 +41,7 @@ import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
 public class OidcProviderMetadataRegistry {
     private final ConcurrentMap<String, OIDCProviderMetadata> cache = new ConcurrentHashMap<>();
 
-    // visible for testing
-    protected @NotNull OIDCProviderMetadata getProviderMetadata(@NotNull String base) {
+    private @NotNull OIDCProviderMetadata getProviderMetadata(@NotNull String base) {
         return cache.computeIfAbsent(base, s -> {
             try {
                 return OIDCProviderMetadata.resolve(new Issuer(s));
@@ -53,19 +51,19 @@ public class OidcProviderMetadataRegistry {
         });
     }
 
-    public @Nullable URI getTokenEndpoint(@NotNull String base) {
+    public @NotNull URI getTokenEndpoint(@NotNull String base) {
         return getProviderMetadata(base).getTokenEndpointURI();
     }
 
-    public @Nullable URI getAuthorizationEndpoint(@NotNull String base) {
+    public @NotNull URI getAuthorizationEndpoint(@NotNull String base) {
         return getProviderMetadata(base).getAuthorizationEndpointURI();
     }
 
-    public @Nullable URI getUserInfoEndpoint(@NotNull String base) {
+    public @NotNull URI getUserInfoEndpoint(@NotNull String base) {
         return getProviderMetadata(base).getUserInfoEndpointURI();
     }
 
-    public @Nullable URI getJWKSetURI(@NotNull String base) {
+    public @NotNull URI getJWKSetURI(@NotNull String base) {
         return getProviderMetadata(base).getJWKSetURI();
     }
 

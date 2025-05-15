@@ -16,9 +16,11 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.util.List;
 
-public abstract class ResolvedConnection {
+abstract class ResolvedConnection {
     protected final String name;
     protected final String authorizationEndpoint;
     protected final String tokenEndpoint;
@@ -27,8 +29,8 @@ public abstract class ResolvedConnection {
     protected final List<String> scopes;
     protected final List<String> additionalAuthorizationParameters;
 
-    public ResolvedConnection(String name, String authorizationEndpoint, String tokenEndpoint, String clientId,
-                                   String clientSecret, List<String> scopes, List<String> additionalAuthorizationParameters) {
+    ResolvedConnection(@NotNull String name, String authorizationEndpoint, String tokenEndpoint, String clientId, 
+                       String clientSecret, @NotNull List<String> scopes, @NotNull List<String> additionalAuthorizationParameters) {
         this.name = name;
         this.authorizationEndpoint = authorizationEndpoint;
         this.tokenEndpoint = tokenEndpoint;
@@ -39,7 +41,7 @@ public abstract class ResolvedConnection {
     }
 
 
-    public String name() {
+    public @NotNull String name() {
         return name;
     }
 
@@ -59,11 +61,11 @@ public abstract class ResolvedConnection {
         return clientSecret;
     }
 
-    public List<String> scopes() {
+    public @NotNull List<String> scopes() {
         return scopes;
     }
 
-    public List<String> additionalAuthorizationParameters() {
+    public @NotNull List<String> additionalAuthorizationParameters() {
         return additionalAuthorizationParameters;
     }
 }

@@ -111,7 +111,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private final boolean userInfoEnabled;
 
-    private boolean pkceEnabled;
+    private final boolean pkceEnabled;
 
     private final String[] path;
 
@@ -191,7 +191,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     public AuthenticationInfo extractCredentials(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response) {
         logger.debug("inside extractCredentials");
 
-        // Check if the request is authenticated by a oidc login token
+        // Check if the request is authenticated by an oidc login token
         AuthenticationInfo authInfo = loginCookieManager.verifyLoginCookie(request);
         if (authInfo != null) {
             // User has a login token
@@ -416,7 +416,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
      * @param conn         The resolved OIDC connection.
      * @return The validated ID token claims set.
      */
-    private @NotNull IDTokenClaimsSet validateIdToken(@NotNull TokenResponse tokenResponse,
+    private static @NotNull IDTokenClaimsSet validateIdToken(@NotNull TokenResponse tokenResponse,
                                                              @NotNull ResolvedOidcConnection conn, Nonce nonce) {
         Issuer issuer = new Issuer(conn.issuer());
         ClientID clientID = new ClientID(conn.clientId());
@@ -543,9 +543,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 }
             }
 
-            String redirectUrl = null;
             Cookie redirectCookie = extractCookie(request, OAuthStateManager.COOKIE_NAME_REDIRECT_URI);
-            redirectUrl = redirectCookie.getValue();
+            String redirectUrl = redirectCookie.getValue();
 
             deleteAuthenticationCookies(request.getRequestURL().toString(), response);
             try {
@@ -577,6 +576,4 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         cookie.setPath(RedirectHelper.findLongestPathMatching(path, requestUri));
         response.addCookie(cookie);
     }
-
-
 }

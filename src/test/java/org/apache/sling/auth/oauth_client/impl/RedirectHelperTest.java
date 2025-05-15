@@ -75,4 +75,12 @@ class RedirectHelperTest {
         String result = RedirectHelper.findLongestPathMatching(paths, url);
         assertNull(result);
     }
+
+    @Test
+    void testFindLongestPathMatchingWithSibling() {
+        String[] paths = {"/a/b/c", "/a/b", "/a"};
+        String url = "http://example.com/a/b/c_sibling/d";
+        String result = RedirectHelper.findLongestPathMatching(paths, url);
+        assertEquals("/a/b", result);
+    }
 }
