@@ -17,20 +17,22 @@
 package org.apache.sling.auth.oauth_client.impl;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
 abstract class ResolvedConnection {
-    protected final String name;
-    protected final String authorizationEndpoint;
-    protected final String tokenEndpoint;
-    protected final String clientId;
-    protected final String clientSecret;
-    protected final List<String> scopes;
-    protected final List<String> additionalAuthorizationParameters;
+    
+    private final String name;
+    private final String authorizationEndpoint;
+    private final String tokenEndpoint;
+    private final String clientId;
+    private final String clientSecret;
+    private final List<String> scopes;
+    private final List<String> additionalAuthorizationParameters;
 
-    ResolvedConnection(@NotNull String name, String authorizationEndpoint, String tokenEndpoint, String clientId, 
-                       String clientSecret, @NotNull List<String> scopes, @NotNull List<String> additionalAuthorizationParameters) {
+    ResolvedConnection(@NotNull String name, @NotNull String authorizationEndpoint, @NotNull String tokenEndpoint, @NotNull String clientId,
+                       @Nullable String clientSecret, @NotNull List<String> scopes, @NotNull List<String> additionalAuthorizationParameters) {
         this.name = name;
         this.authorizationEndpoint = authorizationEndpoint;
         this.tokenEndpoint = tokenEndpoint;
@@ -45,19 +47,19 @@ abstract class ResolvedConnection {
         return name;
     }
 
-    public String authorizationEndpoint() {
+    public @NotNull String authorizationEndpoint() {
         return authorizationEndpoint;
     }
 
-    public String tokenEndpoint() {
+    public @NotNull String tokenEndpoint() {
         return tokenEndpoint;
     }
 
-    public String clientId() {
+    public @NotNull String clientId() {
         return clientId;
     }
 
-    public String clientSecret() {
+    public @Nullable String clientSecret() {
         return clientSecret;
     }
 

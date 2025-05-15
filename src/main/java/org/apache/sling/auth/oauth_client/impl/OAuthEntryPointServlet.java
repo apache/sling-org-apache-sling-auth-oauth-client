@@ -35,6 +35,7 @@ import org.apache.sling.api.servlets.SlingAllMethodsServlet;
 import org.apache.sling.auth.core.AuthConstants;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.servlets.annotations.SlingServletPaths;
+import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -52,7 +53,6 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
 
     private static final long serialVersionUID = 1L;
 
-
     public static final String PATH = "/system/sling/oauth/entry-point"; // NOSONAR
     
     private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -69,7 +69,7 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
     }
 
     @Override
-    protected void doGet(SlingHttpServletRequest request, SlingHttpServletResponse response)
+    protected void doGet(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response)
             throws ServletException, IOException {
         
         try {
@@ -100,8 +100,9 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
         }
     }
     
-    private RedirectTarget getAuthenticationRequestUri(ClientConnection connection, SlingHttpServletRequest request, URI redirectUri) {
-        
+    private @NotNull RedirectTarget getAuthenticationRequestUri(@NotNull ClientConnection connection, 
+                                                                @NotNull SlingHttpServletRequest request, 
+                                                                @NotNull URI redirectUri) {
         ResolvedConnection conn = ResolvedOAuthConnection.resolve(connection);
 
         // The client ID provisioned by the OpenID provider when
