@@ -159,7 +159,7 @@ public class MockRequest implements HttpServletRequest {
     @Override
     public StringBuffer getRequestURL() {
         // TODO
-        return null;
+        return new StringBuffer("/");
     }
 
     @Override

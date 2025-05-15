@@ -18,45 +18,49 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * An OAuth connection that has all configuration parameters materialised
- * 
- * <p>Serves as an internal abstraction over the client-facing {@link ClientConnection} and its implementations.</p>
- */
-public record ResolvedOidcConnection(
-        String name,
-        String authorizationEndpoint,
-        String tokenEndpoint,
-        String clientId,
-        String clientSecret,
-        List<String> scopes,
-        List<String> additionalAuthorizationParameters,
-        java.net.URI jwkSetURL,
-        String issuer
-    ) {
-    
-    public static @NotNull ResolvedOidcConnection resolve(@NotNull ClientConnection connection) {
-        
-        if ( connection instanceof OidcConnectionImpl impl ) {
+class ResolvedOidcConnection extends ResolvedConnection {
+
+    private final URI jwkSetURL;
+    private final String issuer;
+
+    private ResolvedOidcConnection(@NotNull String name, @NotNull String authorizationEndpoint, @NotNull String tokenEndpoint,
+                                   @NotNull String clientId, @Nullable String clientSecret, @NotNull List<String> scopes, 
+                                   @NotNull List<String> additionalAuthorizationParameters, @Nullable URI jwkSetURL, @NotNull String issuer) {
+        super(name, authorizationEndpoint, tokenEndpoint, clientId, clientSecret, scopes, additionalAuthorizationParameters);
+        this.jwkSetURL = jwkSetURL;
+        this.issuer = issuer;
+    }
+
+    @Nullable URI jwkSetURL() {
+        return jwkSetURL;
+    }
+
+    @NotNull String issuer() {
+        return issuer;
+    }
+
+    static @NotNull ResolvedConnection resolve(@NotNull ClientConnection connection) {
+        if (connection instanceof OidcConnectionImpl) {
+            OidcConnectionImpl impl = (OidcConnectionImpl) connection;
             return new ResolvedOidcConnection(
-                    connection.name(), 
-                    impl.authorizationEndpoint(), 
+                    connection.name(),
+                    impl.authorizationEndpoint(),
                     impl.tokenEndpoint(),
-                    impl.clientId(), 
-                    impl.clientSecret(), 
+                    impl.clientId(),
+                    impl.clientSecret(),
                     Arrays.asList(impl.scopes()),
                     Arrays.asList(impl.additionalAuthorizationParameters()),
                     impl.jwkSetURL(),
                     impl.issuer()
-                );
+            );
         }
-        throw new IllegalArgumentException(String.format("Unable to resolve %s (name=%s) of type %s", 
+        throw new IllegalArgumentException(String.format("Unable to resolve %s (name=%s) of type %s",
                 ClientConnection.class.getSimpleName(), connection.name(), connection.getClass().getName()));
-
     }
-
 }

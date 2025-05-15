@@ -18,6 +18,29 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import org.jetbrains.annotations.Nullable;
 
-public record OAuthTokens(@Nullable String accessToken, long expiresAt, @Nullable String refreshToken) {
+public class OAuthTokens {
 
+    private final @Nullable String accessToken;
+    private final long expiresAt;
+    private final @Nullable String refreshToken;
+
+    public OAuthTokens(@Nullable String accessToken, long expiresAt, @Nullable String refreshToken) {
+        this.accessToken = accessToken;
+        this.expiresAt = expiresAt;
+        this.refreshToken = refreshToken;
+    }
+
+    @Nullable
+    public String accessToken() {
+        return accessToken;
+    }
+
+    public long expiresAt() {
+        return expiresAt;
+    }
+
+    @Nullable
+    public String refreshToken() {
+        return refreshToken;
+    }
 }

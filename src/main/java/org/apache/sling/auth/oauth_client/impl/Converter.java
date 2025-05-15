@@ -23,13 +23,16 @@ import com.nimbusds.openid.connect.sdk.token.OIDCTokens;
 import org.jetbrains.annotations.NotNull;
 
 public class Converter {
-
+    
+    private Converter() {}
+    
     public static @NotNull OIDCTokens toNimbusOidcTokens(@NotNull OidcTokens tokens) {
         OIDCTokens nimbusTokens;
         RefreshToken nimbusRefreshToken = tokens.refreshToken() != null ? new RefreshToken(tokens.refreshToken()) : null;
         BearerAccessToken nimbusAccessToken = new BearerAccessToken(tokens.accessToken(), tokens.expiresAt(), null);
-        if ( tokens.idToken() != null ) {
-            nimbusTokens = new OIDCTokens(tokens.idToken(), nimbusAccessToken, nimbusRefreshToken); 
+        String idToken = tokens.idToken();
+        if (idToken != null) {
+            nimbusTokens = new OIDCTokens(idToken, nimbusAccessToken, nimbusRefreshToken); 
         } else {
             nimbusTokens = new OIDCTokens(nimbusAccessToken, nimbusRefreshToken);
         }
@@ -60,9 +63,5 @@ public class Converter {
         String refreshToken = oAuthTokens.getRefreshToken() != null ? oAuthTokens.getRefreshToken().getValue() : null;
 
         return new OAuthTokens(accessToken, expiresAt, refreshToken);
-    }
-    
-    private Converter() {
-        
     }
 }

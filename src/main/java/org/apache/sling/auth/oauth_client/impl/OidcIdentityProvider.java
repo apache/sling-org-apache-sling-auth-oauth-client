@@ -127,7 +127,11 @@ class OidcIdentityProvider implements ExternalIdentityProvider, PrincipalNameRes
     }
     
     private boolean validCredentials(@NotNull Credentials credentials) {
-        return credentials instanceof OidcAuthCredentials oidcAuthCredentials && isSameIdp(oidcAuthCredentials);
+        if (credentials instanceof OidcAuthCredentials) {
+            OidcAuthCredentials oidcAuthCredentials = (OidcAuthCredentials) credentials;
+            return isSameIdp(oidcAuthCredentials);
+        }
+        return false;
     }
     
     private boolean isSameIdp(@NotNull OidcAuthCredentials credentials) {
