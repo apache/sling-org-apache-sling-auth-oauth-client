@@ -71,7 +71,7 @@
             <plugin>
                 <groupId>org.apache.sling</groupId>
                 <artifactId>slingfeature-maven-plugin</artifactId>
-                <version>1.8.2</version>
+                <version>1.9.2</version>
                 <extensions>true</extensions>
                 <configuration>
                     <skipAddFeatureDependencies>true</skipAddFeatureDependencies>
@@ -93,6 +93,7 @@
                         <aggregate>
                             <classifier>app</classifier>
                             <filesInclude>main.json</filesInclude>
+                            <attach>false</attach>
                             <includeArtifact>
                                 <groupId>org.apache.sling</groupId>
                                 <artifactId>org.apache.sling.starter</artifactId>
@@ -204,19 +205,13 @@
             <plugin>
                 <groupId>org.apache.sling</groupId>
                 <artifactId>feature-launcher-maven-plugin</artifactId>
-                <version>0.1.6</version>
+                <version>0.1.8</version>
                 <configuration>
                     <launches>
                         <launch>
                             <id>sling-starter-oak-tar</id>
                             <skip>${skipITs}</skip>
-                            <feature>
-                                <groupId>${project.groupId}</groupId>
-                                <artifactId>${project.artifactId}</artifactId>
-                                <version>${project.version}</version>
-                                <classifier>app</classifier>
-                                <type>slingosgifeature</type>
-                            </feature>
+                            <featureFile>${project.slingfeature.outputDirectory}/feature-app.json</featureFile>
                             <repositoryUrls>
                                 <repositoryUrl>file://${project.build.directory}/artifacts</repositoryUrl>
                             </repositoryUrls>
