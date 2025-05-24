@@ -18,6 +18,7 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import java.util.Map;
 
+import org.jetbrains.annotations.NotNull;
 import org.osgi.util.converter.Converters;
 
 public class MockOidcConnection extends OidcConnectionImpl {
@@ -36,12 +37,12 @@ public class MockOidcConnection extends OidcConnectionImpl {
     }
 
     @Override
-    public String authorizationEndpoint() {
+    public @NotNull String authorizationEndpoint() {
         return baseUrl() + "/authorize";
     }
     
     @Override
-    public String tokenEndpoint() {
+    public @NotNull String tokenEndpoint() {
         return baseUrl() + "/token";
     }
 }

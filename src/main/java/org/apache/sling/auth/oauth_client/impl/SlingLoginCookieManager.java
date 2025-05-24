@@ -141,7 +141,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         return null;
     }
 
-    private @Nullable AuthenticationInfo createAuthInfo(@NotNull final String authData) {
+    private static @Nullable AuthenticationInfo createAuthInfo(@NotNull final String authData) {
         final String userId = getUserId(authData);
         if (userId == null) {
             return null;
@@ -156,7 +156,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         return authInfo;
     }
 
-    private @Nullable String getUserId(@NotNull final String authData) {
+    private static @Nullable String getUserId(@NotNull final String authData) {
         String[] parts = TokenStore.split(authData);
         if (parts.length == 3) {
             return parts[2];

@@ -27,42 +27,27 @@ import org.jetbrains.annotations.NotNull;
  * 
  * <p>Serves as an internal abstraction over the client-facing {@link ClientConnection} and its implementations.</p>
  */
-public class ResolvedOAuthConnection extends ResolvedConnection {
+class ResolvedOAuthConnection extends ResolvedConnection {
 
-    public ResolvedOAuthConnection(String name, String authorizationEndpoint, String tokenEndpoint, String clientId,
-                              String clientSecret, List<String> scopes, List<String> additionalAuthorizationParameters) {
+    private ResolvedOAuthConnection(@NotNull String name, String authorizationEndpoint, String tokenEndpoint, String clientId,
+                                    String clientSecret, @NotNull List<String> scopes, @NotNull List<String> additionalAuthorizationParameters) {
         super(name, authorizationEndpoint, tokenEndpoint, clientId, clientSecret, scopes, additionalAuthorizationParameters);
     }
 
-    public static @NotNull ResolvedOAuthConnection resolve(@NotNull ClientConnection connection) {
-
+    static @NotNull ResolvedConnection resolve(@NotNull ClientConnection connection) {
         if (connection instanceof OidcConnectionImpl) {
-            OidcConnectionImpl impl = (OidcConnectionImpl)connection;
             return new ResolvedOAuthConnection(
                     connection.name(),
-                    impl.authorizationEndpoint(),
-                    impl.tokenEndpoint(),
-                    impl.clientId(),
-                    impl.clientSecret(),
-                    Arrays.asList(impl.scopes()),
-                    Arrays.asList(impl.additionalAuthorizationParameters())
-                );
-        } else if ( connection instanceof OAuthConnectionImpl) {
-            OAuthConnectionImpl impl = (OAuthConnectionImpl)connection;
-            return new ResolvedOAuthConnection(
-                    connection.name(),
-                    impl.authorizationEndpoint(),
-                    impl.tokenEndpoint(),
-                    impl.clientId(),
-                    impl.clientSecret(),
-                    Arrays.asList(impl.scopes()),
-                    Arrays.asList(impl.additionalAuthorizationParameters())
-                );
+                    connection.authorizationEndpoint(),
+                    connection.tokenEndpoint(),
+                    connection.clientId(),
+                    connection.clientSecret(),
+                    Arrays.asList(connection.scopes()),
+                    Arrays.asList(connection.additionalAuthorizationParameters())
+            );
         }
 
         throw new IllegalArgumentException(String.format("Unable to resolve %s (name=%s) of type %s",
                 ClientConnection.class.getSimpleName(), connection.name(), connection.getClass().getName()));
-
     }
-
 }
