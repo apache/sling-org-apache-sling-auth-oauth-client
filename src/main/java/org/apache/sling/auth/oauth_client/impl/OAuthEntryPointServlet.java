@@ -112,6 +112,6 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
         String perRequestKey = new Identifier().getValue();
         State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect));
 
-        return RedirectHelper.buildRedirectTarget(new String[]{PATH}, null, conn, state, perRequestKey, redirectUri, false, null);
+        return RedirectHelper.buildRedirectTarget(new String[]{PATH}, null, conn, state, perRequestKey, redirectUri, false, null, null);
     }
 }

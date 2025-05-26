@@ -52,6 +52,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -80,6 +81,7 @@ class OidcAuthenticationHandlerTest {
     private HttpServletRequest request;
     private HttpServletResponse response;
     private HttpServer tokenEndpointServer;
+    private CryptoService cryptoService = new StubCryptoService();
     HttpServer idpServer;
 
 
@@ -469,7 +471,7 @@ class OidcAuthenticationHandlerTest {
 
         Cookie nonceCookie = mock(Cookie.class);
         when(nonceCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_NONCE);
-        when(nonceCookie.getValue()).thenReturn("nonce");
+        when(nonceCookie.getValue()).thenReturn(cryptoService.encrypt("nonce"));
 
         when(request.getCookies()).thenReturn(new Cookie[] {stateCookie, verifierCookie});
 
@@ -743,7 +745,7 @@ class OidcAuthenticationHandlerTest {
 
         Cookie nonceCookie = mock(Cookie.class);
         when(nonceCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_NONCE);
-        when(nonceCookie.getValue()).thenReturn("nonce");
+        when(nonceCookie.getValue()).thenReturn(cryptoService.encrypt("nonce"));
 
         return new Cookie[] {stateCookie, nonceCookie};
     }
@@ -789,7 +791,8 @@ class OidcAuthenticationHandlerTest {
                 oauthStateManager,
                 config,
                 loginCookieManager,
-                userInfoProcessor
+                userInfoProcessor,
+                cryptoService
         );
     }
 
@@ -875,7 +878,7 @@ class OidcAuthenticationHandlerTest {
         }));
         assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
             if (OAuthStateManager.COOKIE_NAME_NONCE.equals(cookie.getName())) {
-                String cookieValue = cookie.getValue();
+                String cookieValue = cryptoService.decrypt(cookie.getValue());
                 assertNotNull(cookieValue);
                 assertTrue(mockResponse.getSendRedirect().contains("nonce=" + cookieValue));
                 return true;
@@ -957,7 +960,10 @@ class OidcAuthenticationHandlerTest {
         }));
         assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
             if (OAuthStateManager.COOKIE_NAME_NONCE.equals(cookie.getName())) {
-                assertEquals(cookie.getValue(), mockResponse.getSendRedirect().split("nonce=")[1].split("&")[0]);
+                assertEquals(cryptoService.decrypt(cookie.getValue()),
+                                URLDecoder.decode(
+                                    mockResponse.getSendRedirect().split("nonce=")[1].split("&")[0])
+                );
                 return true;
             }
             return false;

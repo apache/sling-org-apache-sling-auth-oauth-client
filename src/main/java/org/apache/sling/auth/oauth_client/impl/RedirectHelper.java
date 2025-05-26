@@ -47,7 +47,7 @@ class RedirectHelper {
     }
 
     static @NotNull RedirectTarget buildRedirectTarget(@NotNull String[] paths, @Nullable String originalRedirectTarget, @NotNull ResolvedConnection conn, @NotNull State state,
-                                                       @NotNull String perRequestKey, @NotNull URI redirectUri, boolean pkceEnabled, @Nullable String nonce) {
+                                                       @NotNull String perRequestKey, @NotNull URI redirectUri, boolean pkceEnabled, @Nullable String nonce, @Nullable String encryptedNonce) {
 
         String path = null;
         if (originalRedirectTarget != null) {
@@ -72,8 +72,8 @@ class RedirectHelper {
         .endpointURI(authorizationEndpointUri)
         .state(state);
 
-        if (nonce != null) {
-            Cookie nonceCookie = buildCookie(path, OAuthStateManager.COOKIE_NAME_NONCE, nonce);
+        if (nonce != null && encryptedNonce != null) {
+            Cookie nonceCookie = buildCookie(path, OAuthStateManager.COOKIE_NAME_NONCE, encryptedNonce);
             cookies.add(nonceCookie);
 
             authRequestBuilder.nonce(new Nonce(nonce));

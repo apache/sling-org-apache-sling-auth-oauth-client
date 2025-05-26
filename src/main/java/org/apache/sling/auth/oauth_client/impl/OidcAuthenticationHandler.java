@@ -52,6 +52,7 @@ import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
+import org.apache.sling.commons.crypto.CryptoService;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
@@ -115,6 +116,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private final String[] path;
 
+    private final CryptoService cryptoService;
+
     @ObjectClassDefinition(
             name = "Apache Sling Oidc Authentication Handler",
             description = "Apache Sling Oidc Authentication Handler Service"
@@ -154,7 +157,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                                      @Reference OAuthStateManager stateManager,
                                      Config config,
                                      @Reference(cardinality = ReferenceCardinality.OPTIONAL, policyOption = ReferencePolicyOption.GREEDY) LoginCookieManager loginCookieManager,
-                                     @Reference(policyOption = ReferencePolicyOption.GREEDY) UserInfoProcessor userInfoProcessor
+                                     @Reference(policyOption = ReferencePolicyOption.GREEDY) UserInfoProcessor userInfoProcessor,
+                                        @Reference CryptoService cryptoService
     ) {
 
         this.repository = repository;
@@ -169,6 +173,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.userInfoEnabled = config.userInfoEnabled();
         this.pkceEnabled = config.pkceEnabled();
         this.path = config.path();
+        this.cryptoService = cryptoService;
 
         logger.debug("activate: registering ExternalIdentityProvider");
         bundleContext.registerService(
@@ -242,7 +247,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         // 5. Validate the ID token
         nonceCookie = extractCookie(request, OAuthStateManager.COOKIE_NAME_NONCE);
-        Nonce nonce = new Nonce(nonceCookie.getValue());
+        Nonce nonce = new Nonce(cryptoService.decrypt(nonceCookie.getValue()));
         IDTokenClaimsSet claims = validateIdToken(tokenResponse, (ResolvedOidcConnection) conn, nonce );
 
         // 6. Make the request to userInfo
@@ -494,7 +499,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         String originalRequestUri = request.getRequestURI();
         Nonce nonce = new Nonce(new Identifier().getValue());
         State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect));
-        return RedirectHelper.buildRedirectTarget(path, originalRequestUri, conn, state, perRequestKey, redirectUri, pkceEnabled, nonce.getValue());
+        return RedirectHelper.buildRedirectTarget(path, originalRequestUri, conn, state, perRequestKey, redirectUri, pkceEnabled, nonce.getValue(), cryptoService.encrypt(nonce.getValue()));
     }
 
     @Override
