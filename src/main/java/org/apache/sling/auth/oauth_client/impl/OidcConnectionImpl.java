@@ -59,32 +59,26 @@ public class OidcConnectionImpl implements ClientConnection {
         return cfg.name();
     }
     
-    @Override
     public @NotNull String authorizationEndpoint() {
         return metadataRegistry.getAuthorizationEndpoint(cfg.baseUrl()).toString();
     }
     
-    @Override
     public @NotNull String tokenEndpoint() {
         return metadataRegistry.getTokenEndpoint(cfg.baseUrl()).toString();
     }
     
-    @Override
     public @NotNull String clientId() {
         return cfg.clientId();
     }
 
-    @Override
     public @Nullable String clientSecret() {
         return cfg.clientSecret();
     }
     
-    @Override
     public @NotNull String[] scopes() {
         return cfg.scopes();
     }
 
-    @Override
     public @NotNull String[] additionalAuthorizationParameters() {
         return cfg.additionalAuthorizationParameters();
     }

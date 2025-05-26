@@ -36,17 +36,17 @@ class ResolvedOAuthConnection extends ResolvedConnection {
 
     static @NotNull ResolvedConnection resolve(@NotNull ClientConnection connection) {
         if (connection instanceof OidcConnectionImpl) {
+            OidcConnectionImpl oidcConnection = (OidcConnectionImpl) connection;
             return new ResolvedOAuthConnection(
                     connection.name(),
-                    connection.authorizationEndpoint(),
-                    connection.tokenEndpoint(),
-                    connection.clientId(),
-                    connection.clientSecret(),
-                    Arrays.asList(connection.scopes()),
-                    Arrays.asList(connection.additionalAuthorizationParameters())
+                    oidcConnection.authorizationEndpoint(),
+                    oidcConnection.tokenEndpoint(),
+                    oidcConnection.clientId(),
+                    oidcConnection.clientSecret(),
+                    Arrays.asList(oidcConnection.scopes()),
+                    Arrays.asList(oidcConnection.additionalAuthorizationParameters())
             );
         }
-
         throw new IllegalArgumentException(String.format("Unable to resolve %s (name=%s) of type %s",
                 ClientConnection.class.getSimpleName(), connection.name(), connection.getClass().getName()));
     }

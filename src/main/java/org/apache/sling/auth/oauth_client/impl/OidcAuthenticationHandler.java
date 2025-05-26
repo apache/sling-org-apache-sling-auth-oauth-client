@@ -115,8 +115,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private final String[] path;
 
-    private final boolean checkNonce;
-
     @ObjectClassDefinition(
             name = "Apache Sling Oidc Authentication Handler",
             description = "Apache Sling Oidc Authentication Handler Service"
@@ -148,9 +146,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 description = "UserInfo Enabled")
         boolean userInfoEnabled() default true;
 
-        @AttributeDefinition(name = "Check Nonce",
-                description = "Check Nonce")
-        boolean checkNonce() default true;
     }
 
     @Activate
@@ -172,7 +167,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.defaultConnectionName = config.defaultConnectionName();
         this.userInfoProcessor = userInfoProcessor;
         this.userInfoEnabled = config.userInfoEnabled();
-        this.checkNonce = config.checkNonce();
         this.pkceEnabled = config.pkceEnabled();
         this.path = config.path();
 
@@ -247,11 +241,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         TokenResponse tokenResponse = extractTokenResponse(authCode, conn, callbackUri, codeVerifierCookie);
 
         // 5. Validate the ID token
-        Nonce nonce = null;
-        if (checkNonce) {
-            nonceCookie = extractCookie(request, OAuthStateManager.COOKIE_NAME_NONCE);
-            nonce = new Nonce(nonceCookie.getValue());
-        }
+        nonceCookie = extractCookie(request, OAuthStateManager.COOKIE_NAME_NONCE);
+        Nonce nonce = new Nonce(nonceCookie.getValue());
         IDTokenClaimsSet claims = validateIdToken(tokenResponse, (ResolvedOidcConnection) conn, nonce );
 
         // 6. Make the request to userInfo
@@ -501,14 +492,9 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         String perRequestKey = new Identifier().getValue();
 
         String originalRequestUri = request.getRequestURI();
-        if (checkNonce) {
-            Nonce nonce = new Nonce(new Identifier().getValue());
-            State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect, nonce.getValue()));
-            return RedirectHelper.buildRedirectTarget(path, originalRequestUri, conn, state, perRequestKey, redirectUri, pkceEnabled, nonce.getValue());
-        } else {
-            State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect, null));
-            return RedirectHelper.buildRedirectTarget(path, originalRequestUri, conn, state, perRequestKey, redirectUri, pkceEnabled, null);
-        }
+        Nonce nonce = new Nonce(new Identifier().getValue());
+        State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect, nonce.getValue()));
+        return RedirectHelper.buildRedirectTarget(path, originalRequestUri, conn, state, perRequestKey, redirectUri, pkceEnabled, nonce.getValue());
     }
 
     @Override
@@ -563,9 +549,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         if (pkceEnabled) {
             deleteCookie(requestUri, response, OAuthStateManager.COOKIE_NAME_CODE_VERIFIER);
         }
-        if (checkNonce) {
-            deleteCookie(requestUri, response, OAuthStateManager.COOKIE_NAME_NONCE);
-        }
+        deleteCookie(requestUri, response, OAuthStateManager.COOKIE_NAME_NONCE);
     }
 
     private void deleteCookie(@NotNull String requestUri, @NotNull HttpServletResponse response, @NotNull String cookieName) {

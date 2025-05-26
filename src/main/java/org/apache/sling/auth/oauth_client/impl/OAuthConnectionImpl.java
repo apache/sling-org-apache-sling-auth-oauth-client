@@ -55,32 +55,26 @@ public class OAuthConnectionImpl implements ClientConnection {
     public @NotNull String name() {
         return cfg.name();
     }
-    @Override
     public @NotNull String authorizationEndpoint() {
         return cfg.authorizationEndpoint();
     }
     
-    @Override
     public @NotNull String tokenEndpoint() {
         return cfg.tokenEndpoint();
     }
     
-    @Override
     public @NotNull String clientId() {
         return cfg.clientId();
     }
 
-    @Override
     public @Nullable String clientSecret() {
         return cfg.clientSecret();
     }
 
-    @Override
     public @NotNull String[] scopes() {
         return cfg.scopes();
     }
 
-    @Override
     public @NotNull String[] additionalAuthorizationParameters() {
         return cfg.additionalAuthorizationParameters();
     }

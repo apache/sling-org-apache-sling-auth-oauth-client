@@ -52,6 +52,7 @@ import org.apache.http.impl.cookie.DefaultCookieSpec;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.sling.auth.oauth_client.impl.JcrUserHomeOAuthTokenStore;
+import org.apache.sling.auth.oauth_client.impl.OAuthConnectionImpl;
 import org.apache.sling.auth.oauth_client.impl.OAuthStateManager;
 import org.apache.sling.auth.oauth_client.impl.OidcConnectionImpl;
 import org.apache.sling.auth.oauth_client.impl.SlingUserInfoProcessorImpl;
@@ -82,6 +83,7 @@ class AuthorizationCodeFlowIT {
     private static final String CRYPTO_SERVICE_PID = JasyptStandardPbeStringCryptoService.class.getName();
     
     private static final String OIDC_CONFIG_PID = OidcConnectionImpl.class.getName();
+    private static final String OAUTH_CONFIG_PID = OAuthConnectionImpl.class.getName();
     private static final int MAX_RETRY = 10;
     private static SupportBundle supportBundle;
 
@@ -184,7 +186,7 @@ class AuthorizationCodeFlowIT {
         String oidcConnectionName = "keycloak";
 
         // configure connection to keycloak
-        configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class).editConfiguration(OIDC_CONFIG_PID+ ".keycloak",OIDC_CONFIG_PID, 
+        configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class).editConfiguration(OAUTH_CONFIG_PID+ ".keycloak",OIDC_CONFIG_PID,
                 Map.of(
                     "name", oidcConnectionName, 
                     "baseUrl", "http://localhost:" + keycloakPort+"/realms/sling",

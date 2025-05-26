@@ -22,8 +22,27 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * Process the user info received from the identity provider and return the credentials that will be returned by the authentication handler.
+ * This interface can be implemented to perform custom processing of the user info, such as mapping fields to a specific format or extracting additional information,
+ * or to perform other operation with the released tokens.
  */
 public interface UserInfoProcessor {
+
+    /**
+     *
+     *  <p>This method is called by the OIDC authentication handler after the user info and token response have been received from the identity provider.</p>
+     *
+     * @param userInfo the user info received from the identity provider, may be null if not available. See: https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
+     * @param tokenResponse the token response received from the identity provider, must not be null. See: https://openid.net/specs/openid-connect-core-1_0.html#HybridTokenResponse
+     * @param oidcSubject the OIDC subject identifier as defined in ID Token, must not be null
+     * @param idp the identity provider identifier as defined in OidcAuthenticationHandler configuration, must not be null
+     * @return the credentials to be returned by the authentication handler, must not be null
+     *
+     * @param userInfo
+     * @param tokenResponse
+     * @param oidcSubject
+     * @param idp
+     * @return
+     */
     @NotNull OidcAuthCredentials process(@Nullable String userInfo, @NotNull String tokenResponse,
                                          @NotNull String oidcSubject, @NotNull String idp);
 }

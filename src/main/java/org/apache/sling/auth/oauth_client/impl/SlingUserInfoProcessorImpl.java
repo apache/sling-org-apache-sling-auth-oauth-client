@@ -41,7 +41,6 @@ import org.slf4j.LoggerFactory;
 
 @Component(
         service = UserInfoProcessor.class,
-        immediate = true,
         property = {
                 "service.ranking:Integer=10"
         }
