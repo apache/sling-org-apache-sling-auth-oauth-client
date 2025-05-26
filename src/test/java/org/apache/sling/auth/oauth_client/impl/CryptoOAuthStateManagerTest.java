@@ -28,9 +28,8 @@ import com.nimbusds.oauth2.sdk.id.State;
 class CryptoOAuthStateManagerTest {
     
     static Stream<OAuthState> states() {
-        return Stream.of(new OAuthState("key1", "conn1", "redir1", "nonce1"),
-                new OAuthState("key1", "conn1", "redir1", null),
-                new OAuthState("key2", "conn2", null, null)
+        return Stream.of(new OAuthState("key1", "conn1", "redir1"),
+                new OAuthState("key2", "conn2", null)
         );
     }
 

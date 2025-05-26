@@ -493,7 +493,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         String originalRequestUri = request.getRequestURI();
         Nonce nonce = new Nonce(new Identifier().getValue());
-        State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect, nonce.getValue()));
+        State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect));
         return RedirectHelper.buildRedirectTarget(path, originalRequestUri, conn, state, perRequestKey, redirectUri, pkceEnabled, nonce.getValue());
     }
 

@@ -24,13 +24,11 @@ public class OAuthState {
     private final @NotNull String perRequestKey;
     private final @NotNull String connectionName;
     private final @Nullable String redirect;
-    private final @Nullable String nonce;
 
-    public OAuthState(@NotNull String perRequestKey, @NotNull String connectionName, @Nullable String redirect, @Nullable String nonce) {
+    public OAuthState(@NotNull String perRequestKey, @NotNull String connectionName, @Nullable String redirect) {
         this.perRequestKey = perRequestKey;
         this.connectionName = connectionName;
         this.redirect = redirect;
-        this.nonce = nonce;
     }
 
     public @NotNull String perRequestKey() {
@@ -45,10 +43,6 @@ public class OAuthState {
         return redirect;
     }
 
-    public @Nullable String nonce() {
-        return nonce;
-    }
-
     //implement equals and hashCode
     @Override
     public boolean equals(Object o) {
@@ -59,8 +53,7 @@ public class OAuthState {
 
         if (!perRequestKey.equals(that.perRequestKey)) return false;
         if (!connectionName.equals(that.connectionName)) return false;
-        if (redirect != null ? !redirect.equals(that.redirect) : that.redirect != null) return false;
-        return nonce != null ? nonce.equals(that.nonce) : that.nonce == null;
+        return (redirect != null ? redirect.equals(that.redirect) : that.redirect == null);
     }
 
     @Override
@@ -68,7 +61,6 @@ public class OAuthState {
         int result = perRequestKey.hashCode();
         result = 31 * result + connectionName.hashCode();
         result = 31 * result + (redirect != null ? redirect.hashCode() : 0);
-        result = 31 * result + (nonce != null ? nonce.hashCode() : 0);
         return result;
     }
 }

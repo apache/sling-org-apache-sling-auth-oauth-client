@@ -104,8 +104,8 @@ class RedirectHelper {
     }
 
     
-    private static @NotNull Cookie buildCookie(@Nullable String path, @NotNull String name, @NotNull String perRequestKey) {
-        Cookie cookie = new Cookie(name, perRequestKey);
+    private static @NotNull Cookie buildCookie(@Nullable String path, @NotNull String name, @NotNull String value) {
+        Cookie cookie = new Cookie(name, value);
         cookie.setHttpOnly(true);
         cookie.setSecure(true);
         cookie.setMaxAge(COOKIE_MAX_AGE_SECONDS);

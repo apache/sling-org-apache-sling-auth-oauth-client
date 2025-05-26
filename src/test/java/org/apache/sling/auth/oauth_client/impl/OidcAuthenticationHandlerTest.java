@@ -26,6 +26,8 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.nimbusds.oauth2.sdk.pkce.CodeChallenge;
+import com.nimbusds.oauth2.sdk.pkce.CodeChallengeMethod;
 import com.nimbusds.oauth2.sdk.pkce.CodeVerifier;
 import com.sun.net.httpserver.HttpServer;
 import net.minidev.json.JSONObject;
@@ -51,7 +53,6 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -935,11 +936,14 @@ class OidcAuthenticationHandlerTest {
         assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
             if (OAuthStateManager.COOKIE_NAME_CODE_VERIFIER.equals(cookie.getName())) {
                 String cookieValue = cookie.getValue();
-                CodeVerifier codeVerifier = new CodeVerifier(cookieValue);
-
                 assertNotNull(cookieValue);
-                assertTrue(mockResponse.getSendRedirect().contains(new String(Base64.getEncoder().encode(codeVerifier.getSHA256())).replaceAll("=$","")));
                 assertTrue(mockResponse.getSendRedirect().contains("code_challenge_method=S256"));
+
+                CodeVerifier codeVerifier = new CodeVerifier(cookieValue);
+                String codeChallenge = mockResponse.getSendRedirect().split("code_challenge=")[1].split("&")[0];
+                CodeChallenge computedCodeChallenge = CodeChallenge.compute(CodeChallengeMethod.S256, codeVerifier);
+                assertEquals(codeChallenge, computedCodeChallenge.getValue());
+
                 return true;
             }
             return false;
@@ -953,7 +957,7 @@ class OidcAuthenticationHandlerTest {
         }));
         assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
             if (OAuthStateManager.COOKIE_NAME_NONCE.equals(cookie.getName())) {
-//                assertEquals(cookie.getValue(), mockResponse.getSendRedirect().split("nonce=")[1].split("&")[0]);
+                assertEquals(cookie.getValue(), mockResponse.getSendRedirect().split("nonce=")[1].split("&")[0]);
                 return true;
             }
             return false;
