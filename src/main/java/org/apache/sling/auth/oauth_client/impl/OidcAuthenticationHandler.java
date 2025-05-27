@@ -200,9 +200,12 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         //The request is not authenticated.
         // 1. Extract nonce cookie and state cookie from the request
         StringBuffer requestURL = request.getRequestURL();
-        if ( request.getQueryString() != null )
+        if ( request.getQueryString() != null ) {
             requestURL.append('?').append(request.getQueryString());
-
+        } else {
+            // If there are no query parameters, the request is not for this authentication handler
+            return null;
+        }
         Optional<OAuthState> clientState; //state returned by the idp in the redirect request
         String authCode; //authorization code returned by the idp in the redirect request
         Cookie stateCookie;
@@ -215,6 +218,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         } catch (ParseException | URISyntaxException | IllegalStateException e) {
             // If we fail parsing the response, we consider the request not for this authentication handler
             //The request may have some parameters that are not relevant for this authentication handler
+            logger.debug("Failed to parse authorization response: {}", e.getMessage(), e);
             return null;
         }
         authCode = extractAuthCode(authResponse);
