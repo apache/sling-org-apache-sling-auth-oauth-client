@@ -29,6 +29,19 @@ class ResolvedOidcConnection extends ResolvedConnection {
     private final URI jwkSetURL;
     private final String issuer;
 
+    /**
+     * Constructs a resolved OIDC connection with all parameters materialised.
+     *
+     * @param name the name of the connection
+     * @param authorizationEndpoint the authorization endpoint URL
+     * @param tokenEndpoint the token endpoint URL
+     * @param clientId the client ID
+     * @param clientSecret the client secret, may be null
+     * @param scopes the list of scopes
+     * @param additionalAuthorizationParameters additional authorization parameters
+     * @param jwkSetURL the JWK Set URL, may be null
+     * @param issuer the issuer URL
+     */
     private ResolvedOidcConnection(@NotNull String name, @NotNull String authorizationEndpoint, @NotNull String tokenEndpoint,
                                    @NotNull String clientId, @Nullable String clientSecret, @NotNull List<String> scopes,
                                    @NotNull List<String> additionalAuthorizationParameters, @Nullable URI jwkSetURL, @NotNull String issuer) {

@@ -21,16 +21,16 @@ import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.rules.TemporaryFolder;
 import org.osgi.framework.BundleContext;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
@@ -51,15 +51,17 @@ class SlingLoginCookieManagerTest {
     private final MockResponse response = new MockResponse();
     private final SlingRepository repository = mock(SlingRepository.class);
     private SlingLoginCookieManager slingLoginCookieManager;
+    private File tempFile;
 
     @BeforeEach
     void setup() throws IOException, NoSuchAlgorithmException, InvalidKeyException {
         SlingLoginCookieManager.SlingLoginCookieManagerConfig config = mock(SlingLoginCookieManager.SlingLoginCookieManagerConfig.class);
 
-        Path tempFilePath = Files.createTempFile("cookie-tokens","bin");
-        File tempFile = tempFilePath.toFile();
+        TemporaryFolder tempFolder = new TemporaryFolder();
+        tempFolder.create();
+        tempFile = tempFolder.newFile();
 
-        when(config.tokenFile()).thenReturn(tempFile.getName());
+        when(config.tokenFile()).thenReturn(tempFile.getAbsolutePath());
         when(config.form_token_fastseed()).thenReturn(false);
         when(config.sessionTimeout()).thenReturn(8 * 60 * 60 * 1000L);
         when(config.cookieName()).thenReturn(COOKIE_NAME);
@@ -68,6 +70,18 @@ class SlingLoginCookieManagerTest {
         when(bundleContext.getDataFile("cookie-tokens")).thenReturn(tempFile);
         
         slingLoginCookieManager = new SlingLoginCookieManager(config, bundleContext);
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        // Clean up the temporary file created for the token store
+        if (tempFile.exists()) {
+            if (!tempFile.delete()) {
+                System.err.println("Error: Failed to delete temporary file: " + tempFile.getAbsolutePath());
+            }
+        } else {
+            System.err.println("Error: Temporary file does not exist: " + tempFile.getAbsolutePath());
+        }
     }
     
     @Test

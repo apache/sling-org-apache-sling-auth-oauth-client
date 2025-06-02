@@ -280,25 +280,15 @@ class AuthorizationCodeFlowIT {
 
     @Test
     void accessTokenIsPresentOnSuccessfulAuthenticationHandlerLoginWithPkceWithNonce() throws Exception {
-        accessTokenIsPresentOnSuccessfulAuthenticationHandlerLogin(true, true);
-    }
-
-    @Test
-    void accessTokenIsPresentOnSuccessfulAuthenticationHandlerLoginWithPkceWithoutNonce() throws Exception {
-        accessTokenIsPresentOnSuccessfulAuthenticationHandlerLogin(true, false);
+        accessTokenIsPresentOnSuccessfulAuthenticationHandlerLogin(true);
     }
 
     @Test
     void accessTokenIsPresentOnSuccessfulAuthenticationHandlerLoginWithoutPkceWithNonce() throws Exception {
-        accessTokenIsPresentOnSuccessfulAuthenticationHandlerLogin(false, true);
+        accessTokenIsPresentOnSuccessfulAuthenticationHandlerLogin(false);
     }
 
-    @Test
-    void accessTokenIsPresentOnSuccessfulAuthenticationHandlerLoginWithoutPkceWithoutNonce() throws Exception {
-        accessTokenIsPresentOnSuccessfulAuthenticationHandlerLogin(false, false);
-    }
-
-    void accessTokenIsPresentOnSuccessfulAuthenticationHandlerLogin(boolean withPkce, boolean withNonce) throws Exception {
+    void accessTokenIsPresentOnSuccessfulAuthenticationHandlerLogin(boolean withPkce) throws Exception {
 
         //Create a sample content with the word "Hello word"
         Map<String, String> properties = Map.of("text", "Hello World");
@@ -414,7 +404,6 @@ class AuthorizationCodeFlowIT {
 
 
         authenticationHandlerConfig.put("pkceEnabled", Boolean.toString(withPkce));
-        authenticationHandlerConfig.put("nonceEnabled", Boolean.toString(withNonce));
 
         configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class).editConfiguration(OIDC_AUTHENTICATION_HANDLER_PID + ".keycloak", OIDC_AUTHENTICATION_HANDLER_PID, authenticationHandlerConfig));
         // clean up any existing tokens
@@ -443,9 +432,7 @@ class AuthorizationCodeFlowIT {
         }
         assertThat(locationHeader.getElements()).as("Location header value from entry-point request")
                 .singleElement().asString().startsWith("http://localhost:" + keycloakPort);
-        if (withNonce) {
-            assertThat(locationHeader.getElements()).as("Nonce is present in the redirect").singleElement().asString().contains("nonce");
-        }
+        assertThat(locationHeader.getElements()).as("Nonce is present in the redirect").singleElement().asString().contains("nonce");
 
         String locationHeaderValue = locationHeader.getValue();
 
@@ -460,16 +447,6 @@ class AuthorizationCodeFlowIT {
         assertTrue(cookies.stream()
                 .filter(cookie -> OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName()))
                 .findFirst().isPresent());
-        if (withPkce) {
-            assertTrue(cookies.stream()
-                    .filter(cookie -> OAuthStateManager.COOKIE_NAME_CODE_VERIFIER.equals(cookie.getName()))
-                    .findFirst().isPresent());
-        }
-        if (withNonce) {
-            assertTrue(cookies.stream()
-                    .filter(cookie -> OAuthStateManager.COOKIE_NAME_NONCE.equals(cookie.getName()))
-                    .findFirst().isPresent());
-        }
         // load login form from keycloak
         HttpClient httpClient = HttpClient.newHttpClient();
         HttpRequest renderLoginFormRequest = HttpRequest.newBuilder().uri(URI.create(locationHeaderValue)).build();

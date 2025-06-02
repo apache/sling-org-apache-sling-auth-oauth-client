@@ -34,6 +34,7 @@ import org.apache.sling.api.SlingHttpServletResponse;
 import org.apache.sling.api.servlets.SlingAllMethodsServlet;
 import org.apache.sling.auth.core.AuthConstants;
 import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.apache.sling.commons.crypto.CryptoService;
 import org.apache.sling.servlets.annotations.SlingServletPaths;
 import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Activate;
@@ -43,7 +44,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nimbusds.oauth2.sdk.id.Identifier;
-import com.nimbusds.oauth2.sdk.id.State;
 
 @Component(service = { Servlet.class },
     property = { AuthConstants.AUTH_REQUIREMENTS +"=" + OAuthEntryPointServlet.PATH }
@@ -58,14 +58,15 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
     private final Logger logger = LoggerFactory.getLogger(getClass());
     
     private final Map<String, ClientConnection> connections;
-    private final OAuthStateManager stateManager;
+
+    private final CryptoService cryptoService;
 
     @Activate
     public OAuthEntryPointServlet(@Reference(policyOption = GREEDY) List<ClientConnection> connections,
-            @Reference OAuthStateManager stateManager) {
+            @Reference CryptoService cryptoService) {
         this.connections = connections.stream()
                 .collect(Collectors.toMap( ClientConnection::name, Function.identity()));
-        this.stateManager = stateManager;
+        this.cryptoService = cryptoService;
     }
 
     @Override
@@ -90,11 +91,9 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
             }
                 
             var redirect = getAuthenticationRequestUri(connection, request, URI.create(OAuthCallbackServlet.getCallbackUri(request)));
-            if (!redirect.cookies().isEmpty()) {
-                response.addCookie(redirect.cookies().get(0));
-            } else {
-                logger.warn("No cookies available in the redirect target.");
-            }            response.sendRedirect(redirect.uri().toString());
+            response.addCookie(redirect.cookie());
+
+            response.sendRedirect(redirect.uri().toString());
         } catch (Exception e) {
             throw new OAuthEntryPointException("Internal error", e);
         }
@@ -102,16 +101,15 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
     
     private @NotNull RedirectTarget getAuthenticationRequestUri(@NotNull ClientConnection connection, 
                                                                 @NotNull SlingHttpServletRequest request, 
-                                                                @NotNull URI redirectUri) {
+                                                                @NotNull URI callbackUri) {
         ResolvedConnection conn = ResolvedOAuthConnection.resolve(connection);
 
-        // The client ID provisioned by the OpenID provider when
-        // the client was registered. It is stored in the connection.
-
+        // TODO: Should we redirect to the target url when redirect is null?
         String redirect = request.getParameter(OAuthStateManager.PARAMETER_NAME_REDIRECT);
-        String perRequestKey = new Identifier().getValue();
-        State state = stateManager.toNimbusState(new OAuthState(perRequestKey, connection.name(), redirect));
 
-        return RedirectHelper.buildRedirectTarget(new String[]{PATH}, null, conn, state, perRequestKey, redirectUri, false, null, null);
+        String perRequestKey = new Identifier().getValue();
+        OAuthCookieValue oAuthCookieValue = new OAuthCookieValue(perRequestKey, connection.name(), redirect);
+
+        return RedirectHelper.buildRedirectTarget(new String[]{PATH}, callbackUri, conn, oAuthCookieValue, cryptoService);
     }
 }

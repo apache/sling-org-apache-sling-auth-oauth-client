@@ -49,7 +49,7 @@ class OAuthEntryPointServletTest {
                 MockOidcConnection.DEFAULT_CONNECTION,
                 new MockOidcConnection(new String[] {"openid"}, MOCK_OIDC_PARAM, "client-id", "client-secret", "http://example.com", new String[] { "access_type=offline" } )
             );
-        servlet =  new OAuthEntryPointServlet(connections, new StubOAuthStateManager());
+        servlet =  new OAuthEntryPointServlet(connections, new StubCryptoService());
     }
     
     @Test

@@ -25,17 +25,17 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import com.nimbusds.oauth2.sdk.id.State;
 
-class CryptoOAuthStateManagerTest {
+class CryptoOAuthCookieValueManagerTest {
     
-    static Stream<OAuthState> states() {
-        return Stream.of(new OAuthState("key1", "conn1", "redir1"),
-                new OAuthState("key2", "conn2", null)
+    static Stream<OAuthCookieValue> states() {
+        return Stream.of(new OAuthCookieValue("key1", "conn1", "redir1"),
+                new OAuthCookieValue("key2", "conn2", null)
         );
     }
 
     @ParameterizedTest
     @MethodSource("states")
-    void encryptAndDecryptSymmetry(OAuthState state) {
+    void encryptAndDecryptSymmetry(OAuthCookieValue state) {
         
         CryptoOAuthStateManager manager = new CryptoOAuthStateManager(new StubCryptoService());
         

@@ -20,23 +20,22 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.servlet.http.Cookie;
 import java.net.URI;
-import java.util.List;
 
 public class RedirectTarget {
 
     private final @NotNull URI uri;
-    private final @NotNull List<Cookie> cookies;
+    private final @NotNull Cookie cookie;
 
-    public RedirectTarget(@NotNull URI uri, @NotNull List<Cookie> cookies) {
+    public RedirectTarget(@NotNull URI uri, @NotNull Cookie cookie) {
         this.uri = uri;
-        this.cookies = cookies;
+        this.cookie = cookie;
     }
 
     public @NotNull URI uri() {
         return uri;
     }
 
-    public @NotNull List<Cookie> cookies() {
-        return cookies;
+    public @NotNull Cookie cookie() {
+        return cookie;
     }
 }

@@ -34,6 +34,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.InMemoryOAuthTokenStore;
+import org.apache.sling.commons.crypto.CryptoService;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.apache.sling.testing.mock.sling.junit5.SlingContextExtension;
 import org.junit.jupiter.api.AfterEach;
@@ -55,6 +56,8 @@ class OAuthCallbackServletTest {
     private InMemoryOAuthTokenStore tokenStore;
 
     private OAuthCallbackServlet servlet;
+
+    private CryptoService cryptoService;
     
     
     @BeforeEach
@@ -72,7 +75,8 @@ class OAuthCallbackServletTest {
        );
         
         tokenStore = new InMemoryOAuthTokenStore();
-        servlet = new OAuthCallbackServlet(connections, tokenStore, new StubOAuthStateManager());
+        cryptoService = new StubCryptoService();
+        servlet = new OAuthCallbackServlet(connections, tokenStore, new StubOAuthStateManager(), cryptoService);
     }
     
     @AfterEach
@@ -116,10 +120,10 @@ class OAuthCallbackServletTest {
     @Test
     void invalidStateCookie() {
         
-        String state = URLEncoder.encode(format("bar|%s", MockOidcConnection.DEFAULT_CONNECTION.name()), StandardCharsets.UTF_8);
+        String cookieValue = String.format("baz|%s", MockOidcConnection.DEFAULT_CONNECTION.name());
         
-        context.request().setQueryString(format("code=foo&state=%s", state));
-        context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, "baz"));
+        context.request().setQueryString(format("code=foo&state=bar"));
+        context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
         
         OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
         assertThat(thrown).hasMessage("State check failed");
@@ -128,10 +132,10 @@ class OAuthCallbackServletTest {
     @Test
     void errorCode() {
         
-        String state = URLEncoder.encode(format("bar|%s", MockOidcConnection.DEFAULT_CONNECTION.name()), StandardCharsets.UTF_8);
+        String cookieValue = format("bar|%s", MockOidcConnection.DEFAULT_CONNECTION.name());
         
-        context.request().setQueryString(format("error=access_denied&state=%s", state));
-        context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, "bar"));
+        context.request().setQueryString(format("error=access_denied&state=%s", "bar"));
+        context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
         
         OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
         assertThat(thrown).hasMessage("Authentication failed");
@@ -142,10 +146,10 @@ class OAuthCallbackServletTest {
         
         // the token endpoint has no handler configured, will result in a 404
 
-        String state = URLEncoder.encode("bar|mock-oidc-local", StandardCharsets.UTF_8);
+        String cookieValue = "bar|mock-oidc-local";
         
-        context.request().setQueryString(format("code=foo&state=%s", state));
-        context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, "bar"));
+        context.request().setQueryString(format("code=foo&state=%s", "bar"));
+        context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
         
         OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
         
@@ -166,10 +170,10 @@ class OAuthCallbackServletTest {
             exchange.close();
         });
         
-        String state = URLEncoder.encode("bar|mock-oidc-local", StandardCharsets.UTF_8);
+        String cookieValue = "bar|mock-oidc-local";
         
-        context.request().setQueryString(format("code=foo&state=%s", state));
-        context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, "bar"));
+        context.request().setQueryString(format("code=foo&state=%s", "bar"));
+        context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
         
         OAuthCallbackException thrown = assertThrowsExactly(OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
         
@@ -187,7 +191,7 @@ class OAuthCallbackServletTest {
         assertThat(context.response().getStatus()).as("response code").isEqualTo(HttpServletResponse.SC_NO_CONTENT);
     }
 
-    private void successfulExecution(String stateValue) throws IOException, ServletException {
+    private void successfulExecution(String cookieValue) throws IOException, ServletException {
         
         tokenEndpointServer.createContext("/token", exchange -> {
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -197,10 +201,10 @@ class OAuthCallbackServletTest {
             exchange.close();
         });
         
-        String state = URLEncoder.encode(stateValue, StandardCharsets.UTF_8);
+        String state = "bar";
         
         context.request().setQueryString(format("code=foo&state=%s", state));
-        context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, "bar"));
+        context.request().addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
         
         servlet.service(context.request(), context.response());
         
