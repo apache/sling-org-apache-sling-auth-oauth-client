@@ -25,56 +25,51 @@ import java.nio.file.Files;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.Collection;
-import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import org.awaitility.Awaitility;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /* TokenStore tests, taken from org.apache.sling.auth.form */
-@RunWith(Parameterized.class)
 public class TokenStoreTest {
     private static final long SESSION_TIMEOUT_MSEC = 60 * 1000L;
     private static final long DEFAULT_EXPIRATION_TIME_MSEC = System.currentTimeMillis() + SESSION_TIMEOUT_MSEC / 2;
     private static final String USER_ID = "user_" + UUID.randomUUID();
 
-    @Parameterized.Parameters(name = "name={1}")
-    public static Collection<Object[]> parameters() {
-        return List.of(new Object[] {false, "fastSeed = false"}, new Object[] {true, "fastSeed = true"});
-    }
-
-    private final boolean fastSeed;
+    private boolean fastSeed;
     private TokenStore store;
     private String encodedToken;
     private File tokenFile;
     private int additionalFileIndex;
 
-    public TokenStoreTest(boolean fastSeed, String name) {
-        this.fastSeed = fastSeed;
-    }
-
     private File additionalTokenFile() {
         return new File(tokenFile.getParent(), tokenFile.getName() + "-" + additionalFileIndex++);
     }
 
-    @Before
+    @BeforeEach
     public void setup() throws IOException, InvalidKeyException, NoSuchAlgorithmException, IllegalStateException {
         tokenFile = Files.createTempFile(getClass().getName(), "tokenstore").toFile();
         store = new TokenStore(tokenFile, SESSION_TIMEOUT_MSEC, fastSeed);
         encodedToken = store.encode(DEFAULT_EXPIRATION_TIME_MSEC, USER_ID);
     }
 
-    @Test
-    public void validTokenTest() {
+    public static Stream<Object[]> parameters() {
+        return Stream.of(new Object[] {false, "fastSeed = false"}, new Object[] {true, "fastSeed = true"});
+    }
+
+    @ParameterizedTest(name = "name={1}")
+    @MethodSource("parameters")
+    void validTokenTest(boolean fastSeed, String name) {
+        this.fastSeed = fastSeed;
         assertTrue(store.isValid(encodedToken));
     }
 

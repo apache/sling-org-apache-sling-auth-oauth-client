@@ -69,14 +69,12 @@ import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.commons.crypto.CryptoService;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
 import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicyOption;
 import org.osgi.service.metatype.annotations.AttributeDefinition;
 import org.osgi.service.metatype.annotations.Designate;
@@ -93,10 +91,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private static final Logger logger = LoggerFactory.getLogger(OidcAuthenticationHandler.class);
     private static final String AUTH_TYPE = "oidc";
 
-    private final SlingRepository repository;
-
     private final Map<String, ClientConnection> connections;
-    private final OAuthStateManager stateManager;
 
     private final String idp;
 
@@ -147,19 +142,14 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     @Activate
     public OidcAuthenticationHandler(
-            @Reference(policyOption = ReferencePolicyOption.GREEDY) @NotNull SlingRepository repository,
             @NotNull BundleContext bundleContext,
             @Reference List<ClientConnection> connections,
-            @Reference OAuthStateManager stateManager,
             Config config,
-            @Reference(cardinality = ReferenceCardinality.OPTIONAL, policyOption = ReferencePolicyOption.GREEDY)
-                    LoginCookieManager loginCookieManager,
+            @Reference(policyOption = ReferencePolicyOption.GREEDY) LoginCookieManager loginCookieManager,
             @Reference(policyOption = ReferencePolicyOption.GREEDY) UserInfoProcessor userInfoProcessor,
             @Reference CryptoService cryptoService) {
 
-        this.repository = repository;
         this.connections = connections.stream().collect(Collectors.toMap(ClientConnection::name, Function.identity()));
-        this.stateManager = stateManager;
         this.idp = config.idp();
         this.callbackUri = config.callbackUri();
         this.loginCookieManager = loginCookieManager;
@@ -548,7 +538,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 String token = tokenValueObject.toString();
                 if (!token.isEmpty()) {
                     logger.debug("Calling TokenUpdate service to update token cookie");
-                    loginCookieManager.setLoginCookie(request, response, repository, oidcAuthCredentials);
+                    loginCookieManager.setLoginCookie(request, response, oidcAuthCredentials);
                 }
             }
 

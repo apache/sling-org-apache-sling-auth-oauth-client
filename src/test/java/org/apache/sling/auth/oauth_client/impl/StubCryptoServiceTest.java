@@ -30,7 +30,7 @@ class StubCryptoServiceTest {
         assertThat(stubCryptoService.decrypt(stubCryptoService.encrypt("test"))).isEqualTo("test");
     }
 
-    @org.junit.Test
+    @Test
     void encryptIsNotEqualToInput() {
         StubCryptoService stubCryptoService = new StubCryptoService();
         assertThat(stubCryptoService.encrypt("test")).isNotEqualTo("test");

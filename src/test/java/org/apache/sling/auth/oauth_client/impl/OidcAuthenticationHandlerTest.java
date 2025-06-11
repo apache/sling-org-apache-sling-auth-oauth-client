@@ -28,6 +28,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -54,12 +55,16 @@ import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.commons.crypto.CryptoService;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
+import org.apache.sling.testing.mock.osgi.junit.OsgiContext;
+import org.apache.sling.testing.mock.osgi.junit5.OsgiContextExtension;
+import org.apache.sling.testing.mock.sling.servlet.MockSlingHttpServletRequest;
+import org.apache.sling.testing.mock.sling.servlet.MockSlingHttpServletResponse;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.osgi.framework.BundleContext;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -68,14 +73,14 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(OsgiContextExtension.class)
 class OidcAuthenticationHandlerTest {
 
     private static final String MOCK_OIDC_PARAM = "mock-oidc-param";
     private static final String ISSUER = "myIssuer";
-    private SlingRepository repository;
+    private OsgiContext osgiContext = new OsgiContext();
     private BundleContext bundleContext;
     private List<ClientConnection> connections;
-    private OAuthStateManager oauthStateManager;
     private OidcAuthenticationHandler oidcAuthenticationHandler;
 
     private OidcAuthenticationHandler.Config config;
@@ -92,8 +97,7 @@ class OidcAuthenticationHandlerTest {
         tokenEndpointServer = createHttpServer();
         idpServer = createHttpServer();
 
-        repository = mock(SlingRepository.class);
-        bundleContext = mock(BundleContext.class);
+        bundleContext = osgiContext.bundleContext();
         config = mock(OidcAuthenticationHandler.Config.class);
         when(config.idp()).thenReturn("myIdP");
         when(config.path()).thenReturn(new String[] {"/"});
@@ -108,8 +112,6 @@ class OidcAuthenticationHandlerTest {
         when(config.pkceEnabled()).thenReturn(false);
         connections = new ArrayList<>();
         connections.add(MockOidcConnection.DEFAULT_CONNECTION);
-
-        oauthStateManager = new StubOAuthStateManager();
 
         request = mock(HttpServletRequest.class);
 
@@ -794,14 +796,7 @@ class OidcAuthenticationHandlerTest {
 
     private void createOidcAuthenticationHandler() {
         oidcAuthenticationHandler = new OidcAuthenticationHandler(
-                repository,
-                bundleContext,
-                connections,
-                oauthStateManager,
-                config,
-                loginCookieManager,
-                userInfoProcessor,
-                cryptoService);
+                bundleContext, connections, config, loginCookieManager, userInfoProcessor, cryptoService);
     }
 
     private HttpServer createHttpServer() throws IOException {
@@ -874,25 +869,26 @@ class OidcAuthenticationHandlerTest {
         when(config.pkceEnabled()).thenReturn(false);
 
         when(request.getRequestURI()).thenReturn("http://localhost");
-        MockResponse mockResponse = new MockResponse();
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
 
         createOidcAuthenticationHandler();
         assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
-        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+        assertTrue(Arrays.stream(mockResponse.getCookies()).anyMatch(cookie -> {
             if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
                 OAuthCookieValue oauthCookieValue = new OAuthCookieValue(cookie.getValue(), cryptoService);
 
                 // Verify that state is present in request and in cookie
-                assertTrue(mockResponse.getSendRedirect().contains("state=" + oauthCookieValue.perRequestKey()));
+                assertEquals(302, mockResponse.getStatus());
+                assertTrue(mockResponse.getHeader("location").contains("state=" + oauthCookieValue.perRequestKey()));
 
                 // Verify that nonce is present in request and in cookie
                 assertTrue(mockResponse
-                        .getSendRedirect()
+                        .getHeader("location")
                         .contains("nonce=" + oauthCookieValue.nonce().getValue()));
 
                 // Verify that codeVerifier is not present cookie and request
                 assertNull(oauthCookieValue.codeVerifier());
-                assertFalse(mockResponse.getSendRedirect().contains("code_verifier="));
+                assertFalse(mockResponse.getHeader("location").contains("code_verifier="));
 
                 // Verify that the redirect URI in the cookie is correct
                 assertTrue(oauthCookieValue.redirect().equals("http://localhost"));
@@ -926,7 +922,7 @@ class OidcAuthenticationHandlerTest {
         when(config.callbackUri()).thenReturn("http://redirect");
         when(config.pkceEnabled()).thenReturn(false);
 
-        MockResponse mockResponse = new MockResponse();
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
 
         when(config.pkceEnabled()).thenReturn(true);
         when(config.path()).thenReturn(new String[] {"/"});
@@ -935,17 +931,18 @@ class OidcAuthenticationHandlerTest {
 
         createOidcAuthenticationHandler();
         assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
-        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+        assertTrue(Arrays.stream(mockResponse.getCookies()).anyMatch(cookie -> {
             if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
                 String cookieValue = cryptoService.decrypt(cookie.getValue());
                 assertNotNull(cookieValue);
                 String[] cookieParts = cookieValue.split("\\|");
 
                 // Verify code verifier in the cookie match with code_challenge in the redirect
-                assertTrue(mockResponse.getSendRedirect().contains("code_challenge_method=S256"));
+                assertTrue(mockResponse.getHeader("location").contains("code_challenge_method=S256"));
+                assertEquals(302, mockResponse.getStatus());
                 CodeVerifier codeVerifier = new CodeVerifier(cookieParts[OAuthCookieValue.CODE_VERIFIER_INDEX]);
 
-                String codeChallenge = mockResponse.getSendRedirect()
+                String codeChallenge = mockResponse.getHeader("location")
                         .split("code_challenge=")[1]
                         .split("&")[0];
                 CodeChallenge computedCodeChallenge = CodeChallenge.compute(CodeChallengeMethod.S256, codeVerifier);
@@ -954,12 +951,12 @@ class OidcAuthenticationHandlerTest {
                 // Verify that steate in the cookie matches with state in the redirect
                 assertEquals(
                         cookieParts[OAuthCookieValue.STATE_INDEX],
-                        mockResponse.getSendRedirect().split("state=")[1].split("&")[0]);
+                        mockResponse.getHeader("location").split("state=")[1].split("&")[0]);
 
                 // Verify that nonce in the cookie matches with nonce in the redirect
                 assertEquals(
                         cookieParts[OAuthCookieValue.NONCE_INDEX],
-                        URLDecoder.decode(mockResponse.getSendRedirect()
+                        URLDecoder.decode(mockResponse.getHeader("location")
                                 .split("nonce=")[1]
                                 .split("&")[0]));
 
@@ -967,7 +964,7 @@ class OidcAuthenticationHandlerTest {
                 assertTrue(cookieParts[OAuthCookieValue.REDIRECT_INDEX].equals("http://localhost"));
 
                 // Verify that the callbackUri is correct
-                assertTrue(mockResponse.getSendRedirect().contains("redirect_uri=http%3A%2F%2Fredirect"));
+                assertTrue(mockResponse.getHeader("location").contains("redirect_uri=http%3A%2F%2Fredirect"));
                 return true;
             }
             return false;
@@ -999,12 +996,12 @@ class OidcAuthenticationHandlerTest {
         when(config.callbackUri()).thenReturn("http://redirect");
 
         when(request.getParameter("c")).thenReturn("unknown-connection");
-        MockResponse response1 = new MockResponse();
+        MockSlingHttpServletResponse response1 = new MockSlingHttpServletResponse();
 
         createOidcAuthenticationHandler();
         assertFalse(oidcAuthenticationHandler.requestCredentials(request, response1));
-        assertEquals(HttpServletResponse.SC_BAD_REQUEST, response1.getErrorCode());
-        assertEquals("Client requested unknown connection", response1.getErrorMessage());
+        assertEquals(HttpServletResponse.SC_BAD_REQUEST, response1.getStatus());
+        assertEquals("Client requested unknown connection", response1.getStatusMessage());
     }
 
     @Test
@@ -1033,7 +1030,7 @@ class OidcAuthenticationHandlerTest {
     @Test
     void authenticationSucceededLoginManagerWithNoLoginCookie() {
         when(loginCookieManager.getLoginCookie(request)).thenReturn(null);
-        MockResponse mockResponse = new MockResponse();
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
 
         createOidcAuthenticationHandler();
         AuthenticationInfo authInfo = new AuthenticationInfo("oidc", "testUser");
@@ -1041,16 +1038,17 @@ class OidcAuthenticationHandlerTest {
         credentials.setAttribute(".token", "testToken");
         authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_CREDENTIALS, credentials);
 
-        MockRequest mockRequest = new MockRequest();
+        MockSlingHttpServletRequest mockRequest = new MockSlingHttpServletRequest(bundleContext);
         mockRequest.setAttribute(OidcAuthenticationHandler.REDIRECT_ATTRIBUTE_NAME, "http://localhost:8080");
 
         when(config.pkceEnabled()).thenReturn(true);
         createOidcAuthenticationHandler();
 
         assertTrue(oidcAuthenticationHandler.authenticationSucceeded(mockRequest, mockResponse, authInfo));
-        assertEquals("http://localhost:8080", mockResponse.getSendRedirect());
+        assertEquals("http://localhost:8080", mockResponse.getHeader("location"));
+        assertEquals(302, mockResponse.getStatus());
 
-        assertTrue(mockResponse.getCookies().stream().anyMatch(cookie -> {
+        assertTrue(Arrays.stream(mockResponse.getCookies()).anyMatch(cookie -> {
             if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
                 int maxAge = cookie.getMaxAge();
                 assertEquals(0, maxAge);
@@ -1065,6 +1063,12 @@ class OidcAuthenticationHandlerTest {
         OidcConnectionImpl oidcClientConnection = mock(OidcConnectionImpl.class);
         when(oidcClientConnection.scopes()).thenReturn(new String[0]);
         when(oidcClientConnection.additionalAuthorizationParameters()).thenReturn(new String[0]);
+        when(oidcClientConnection.name()).thenReturn("test");
+        when(oidcClientConnection.clientId()).thenReturn("client-id");
+        when(oidcClientConnection.clientSecret()).thenReturn("client-secret");
+        when(oidcClientConnection.authorizationEndpoint()).thenReturn("http://localhost:8080/authorize");
+        when(oidcClientConnection.tokenEndpoint()).thenReturn("http://localhost:8080/token");
+        when(oidcClientConnection.issuer()).thenReturn("http://localhost:8080/issuer");
         assertInstanceOf(ResolvedOidcConnection.class, ResolvedOidcConnection.resolve(oidcClientConnection));
 
         OAuthConnectionImpl oauthClientConnection = mock(OAuthConnectionImpl.class);

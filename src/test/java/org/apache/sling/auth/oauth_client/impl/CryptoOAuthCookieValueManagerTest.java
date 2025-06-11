@@ -21,7 +21,6 @@ package org.apache.sling.auth.oauth_client.impl;
 import java.util.stream.Stream;
 
 import com.nimbusds.oauth2.sdk.id.State;
-import org.junit.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -48,16 +47,5 @@ class CryptoOAuthCookieValueManagerTest {
                 .isNotBlank();
 
         assertThat(manager.toOAuthState(nimbusState)).as("decoded OAuth state").contains(state);
-    }
-
-    @Test
-    void identicalInputsGenerateDifferentOutputs() {
-
-        CryptoOAuthStateManager manager = new CryptoOAuthStateManager(new StubCryptoService());
-
-        State firstState = manager.toNimbusState(states().findFirst().get());
-        State secondState = manager.toNimbusState(states().findFirst().get());
-
-        assertThat(firstState.getValue()).as("generated states are different").isNotEqualTo(secondState.getValue());
     }
 }

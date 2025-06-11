@@ -32,7 +32,6 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -88,10 +87,7 @@ public class SlingLoginCookieManager implements LoginCookieManager {
 
     @Override
     public void setLoginCookie(
-            @NotNull HttpServletRequest request,
-            @NotNull HttpServletResponse response,
-            @NotNull SlingRepository repository,
-            @NotNull Credentials creds) {
+            @NotNull HttpServletRequest request, @NotNull HttpServletResponse response, @NotNull Credentials creds) {
 
         long expires = System.currentTimeMillis() + this.sessionTimeout;
 
