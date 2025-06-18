@@ -39,6 +39,8 @@ import org.slf4j.LoggerFactory;
 
 class RedirectHelper {
 
+    static final String PARAMETER_NAME_REDIRECT = "redirect";
+
     // We don't want leave the cookie lying around for a long time because it is not needed.
     // At the same time, some OAuth user authentication flows take a long time due to
     // consent, account selection, 2FA, etc. so we cannot make this too short.
@@ -60,7 +62,7 @@ class RedirectHelper {
 
         // Set the cookie with state, connection name, redirect uri, nonce and codeverifier
         Cookie requestKeyCookie = buildCookie(
-                path, OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(oAuthCookieValue.getValue()));
+                path, OAuthCookieValue.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(oAuthCookieValue.getValue()));
 
         // We build th redirect url to be sent to the browser
         URI authorizationEndpointUri = URI.create(conn.authorizationEndpoint());

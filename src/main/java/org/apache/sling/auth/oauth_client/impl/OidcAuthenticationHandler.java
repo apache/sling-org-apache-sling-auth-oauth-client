@@ -209,7 +209,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             return null;
         }
         authCode = extractAuthCode(authResponse);
-        oauthCookie = extractCookie(request, OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        oauthCookie = extractCookie(request, OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
         OAuthCookieValue oAuthCookieValue = new OAuthCookieValue(oauthCookie.getValue(), cryptoService);
 
         // Set the redirect Attribute to the original redirect URI
@@ -555,7 +555,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     }
 
     private void deleteAuthenticationCookies(@NotNull String requestUri, @NotNull HttpServletResponse response) {
-        deleteCookie(requestUri, response, OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        deleteCookie(requestUri, response, OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
     }
 
     private void deleteCookie(

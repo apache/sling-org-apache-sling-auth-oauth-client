@@ -132,7 +132,7 @@ class OAuthCallbackServletTest {
 
         context.request().setQueryString(format("code=foo&state=bar"));
         context.request()
-                .addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
+                .addCookie(new Cookie(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
 
         OAuthCallbackException thrown = assertThrowsExactly(
                 OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
@@ -146,7 +146,7 @@ class OAuthCallbackServletTest {
 
         context.request().setQueryString(format("error=access_denied&state=%s", "bar"));
         context.request()
-                .addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
+                .addCookie(new Cookie(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
 
         OAuthCallbackException thrown = assertThrowsExactly(
                 OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
@@ -162,7 +162,7 @@ class OAuthCallbackServletTest {
 
         context.request().setQueryString(format("code=foo&state=%s", "bar"));
         context.request()
-                .addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
+                .addCookie(new Cookie(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
 
         OAuthCallbackException thrown = assertThrowsExactly(
                 OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
@@ -185,7 +185,7 @@ class OAuthCallbackServletTest {
 
         context.request().setQueryString(format("code=foo&state=%s", "bar"));
         context.request()
-                .addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
+                .addCookie(new Cookie(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
 
         OAuthCallbackException thrown = assertThrowsExactly(
                 OAuthCallbackException.class, () -> servlet.service(context.request(), context.response()));
@@ -215,7 +215,7 @@ class OAuthCallbackServletTest {
 
         context.request().setQueryString(format("code=foo&state=%s", state));
         context.request()
-                .addCookie(new Cookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
+                .addCookie(new Cookie(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(cookieValue)));
 
         servlet.service(context.request(), context.response());
 

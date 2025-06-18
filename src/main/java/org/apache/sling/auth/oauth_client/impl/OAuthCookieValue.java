@@ -29,6 +29,8 @@ import org.slf4j.LoggerFactory;
 
 public class OAuthCookieValue {
 
+    public static final String COOKIE_NAME_REQUEST_KEY = "sling.oauth-request-key";
+
     private final @NotNull String perRequestKey;
     private final @NotNull String connectionName;
 

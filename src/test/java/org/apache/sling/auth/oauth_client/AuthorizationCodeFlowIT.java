@@ -55,7 +55,7 @@ import org.apache.http.message.BasicHeader;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.sling.auth.oauth_client.impl.JcrUserHomeOAuthTokenStore;
 import org.apache.sling.auth.oauth_client.impl.OAuthConnectionImpl;
-import org.apache.sling.auth.oauth_client.impl.OAuthStateManager;
+import org.apache.sling.auth.oauth_client.impl.OAuthCookieValue;
 import org.apache.sling.auth.oauth_client.impl.OidcConnectionImpl;
 import org.apache.sling.auth.oauth_client.impl.SlingUserInfoProcessorImpl;
 import org.apache.sling.auth.oauth_client.itbundle.SupportBundle;
@@ -493,7 +493,7 @@ class AuthorizationCodeFlowIT {
 
         // Assert that cookies are set
         assertTrue(cookies.stream()
-                .filter(cookie -> OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName()))
+                .filter(cookie -> OAuthCookieValue.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName()))
                 .findFirst()
                 .isPresent());
         // load login form from keycloak

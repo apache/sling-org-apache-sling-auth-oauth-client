@@ -120,11 +120,10 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
             throws ServletException {
 
         // Retrieve the cookie with persisted data for oauth
-        Cookie stateCookie = request.getCookie(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        Cookie stateCookie = request.getCookie(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
         if (stateCookie == null) {
             logger.debug(
-                    "Failed state check: No request cookie named '{}' found",
-                    OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+                    "Failed state check: No request cookie named '{}' found", OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }

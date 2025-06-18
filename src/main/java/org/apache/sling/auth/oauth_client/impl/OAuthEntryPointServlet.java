@@ -109,7 +109,7 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
         ResolvedConnection conn = ResolvedOAuthConnection.resolve(connection);
 
         // TODO: Should we redirect to the target url when redirect is null?
-        String redirect = request.getParameter(OAuthStateManager.PARAMETER_NAME_REDIRECT);
+        String redirect = request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT);
 
         String perRequestKey = new Identifier().getValue();
         OAuthCookieValue oAuthCookieValue = new OAuthCookieValue(perRequestKey, connection.name(), redirect);

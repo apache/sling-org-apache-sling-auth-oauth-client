@@ -187,14 +187,14 @@ class OidcAuthenticationHandlerTest {
         assertEquals(
                 String.format(
                         "Failed state check: No request cookie named %s found",
-                        OAuthStateManager.COOKIE_NAME_REQUEST_KEY),
+                        OAuthCookieValue.COOKIE_NAME_REQUEST_KEY),
                 exception.getMessage());
     }
 
     @Test
     void extractCredentialsWithNonMatchingState() {
         Cookie stateCookie = mock(Cookie.class);
-        when(stateCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        when(stateCookie.getName()).thenReturn(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
         when(stateCookie.getValue()).thenReturn(cryptoService.encrypt("non-matchpart1|mock-oidc-param|redirect|nonce"));
 
         when(request.getCookies()).thenReturn(new Cookie[] {stateCookie});
@@ -209,7 +209,7 @@ class OidcAuthenticationHandlerTest {
     void extractCredentialsWithMatchingStateWithInvalidConnection() {
         when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1&nonce=nonce");
         Cookie stateCookie = mock(Cookie.class);
-        when(stateCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        when(stateCookie.getName()).thenReturn(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
         when(stateCookie.getValue())
                 .thenReturn(cryptoService.encrypt(
                         "part1|invalid-connection|redirect|nonce|0123456789012345678901234567890123456789123"));
@@ -442,7 +442,7 @@ class OidcAuthenticationHandlerTest {
         when(config.userInfoEnabled()).thenReturn(true);
 
         Cookie stateCookie = mock(Cookie.class);
-        when(stateCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        when(stateCookie.getName()).thenReturn(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
         when(stateCookie.getValue()).thenReturn(cryptoService.encrypt("part1|mock-oidc-param|redirect|invalid-nonce"));
 
         // Test with an id token signed by another key, and expired
@@ -466,7 +466,7 @@ class OidcAuthenticationHandlerTest {
         when(config.pkceEnabled()).thenReturn(true);
 
         Cookie stateCookie = mock(Cookie.class);
-        when(stateCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        when(stateCookie.getName()).thenReturn(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
         when(stateCookie.getValue())
                 .thenReturn(cryptoService.encrypt(
                         "part1|mock-oidc-param|redirect|nonce|12345678901234567890123456789012345678901234"));
@@ -753,7 +753,7 @@ class OidcAuthenticationHandlerTest {
 
     private Cookie[] createMockCookies() {
         Cookie stateCookie = mock(Cookie.class);
-        when(stateCookie.getName()).thenReturn(OAuthStateManager.COOKIE_NAME_REQUEST_KEY);
+        when(stateCookie.getName()).thenReturn(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
         when(stateCookie.getValue())
                 .thenReturn(cryptoService.encrypt(
                         "part1|mock-oidc-param|redirect|nonce|0123456789012345678901234567890123456789123"));
@@ -874,7 +874,7 @@ class OidcAuthenticationHandlerTest {
         createOidcAuthenticationHandler();
         assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
         assertTrue(Arrays.stream(mockResponse.getCookies()).anyMatch(cookie -> {
-            if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+            if (OAuthCookieValue.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
                 OAuthCookieValue oauthCookieValue = new OAuthCookieValue(cookie.getValue(), cryptoService);
 
                 // Verify that state is present in request and in cookie
@@ -932,7 +932,7 @@ class OidcAuthenticationHandlerTest {
         createOidcAuthenticationHandler();
         assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
         assertTrue(Arrays.stream(mockResponse.getCookies()).anyMatch(cookie -> {
-            if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+            if (OAuthCookieValue.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
                 String cookieValue = cryptoService.decrypt(cookie.getValue());
                 assertNotNull(cookieValue);
                 String[] cookieParts = cookieValue.split("\\|");
@@ -1049,7 +1049,7 @@ class OidcAuthenticationHandlerTest {
         assertEquals(302, mockResponse.getStatus());
 
         assertTrue(Arrays.stream(mockResponse.getCookies()).anyMatch(cookie -> {
-            if (OAuthStateManager.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+            if (OAuthCookieValue.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
                 int maxAge = cookie.getMaxAge();
                 assertEquals(0, maxAge);
                 return true;
