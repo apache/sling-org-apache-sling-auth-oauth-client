@@ -79,7 +79,6 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
 
     private final Map<String, ClientConnection> connections;
     private final OAuthTokenStore tokenStore;
-    private final OAuthStateManager stateManager;
     private final CryptoService cryptoService;
 
     static String getCallbackUri(HttpServletRequest request) {
@@ -110,11 +109,9 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
     public OAuthCallbackServlet(
             @Reference(policyOption = GREEDY) List<ClientConnection> connections,
             @Reference OAuthTokenStore tokenStore,
-            @Reference OAuthStateManager stateManager,
             @Reference CryptoService cryptoService) {
         this.connections = connections.stream().collect(Collectors.toMap(ClientConnection::name, Function.identity()));
         this.tokenStore = tokenStore;
-        this.stateManager = stateManager;
         this.cryptoService = cryptoService;
     }
 

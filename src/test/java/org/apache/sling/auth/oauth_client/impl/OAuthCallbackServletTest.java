@@ -86,7 +86,7 @@ class OAuthCallbackServletTest {
 
         tokenStore = new InMemoryOAuthTokenStore();
         cryptoService = new StubCryptoService();
-        servlet = new OAuthCallbackServlet(connections, tokenStore, new StubOAuthStateManager(), cryptoService);
+        servlet = new OAuthCallbackServlet(connections, tokenStore, cryptoService);
     }
 
     @AfterEach
