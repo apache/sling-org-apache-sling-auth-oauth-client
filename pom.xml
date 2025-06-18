@@ -42,7 +42,6 @@
     <properties>
         <sling.java.version>11</sling.java.version>
         <project.build.outputTimestamp>1747146729</project.build.outputTimestamp>
-        <bnd.baseline.skip>true</bnd.baseline.skip>
         <it.startTimeoutSeconds>60</it.startTimeoutSeconds>
     </properties>
     <dependencies>
