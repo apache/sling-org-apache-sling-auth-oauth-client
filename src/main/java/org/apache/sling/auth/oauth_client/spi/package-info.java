@@ -16,5 +16,5 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-@org.osgi.annotation.versioning.Version("2.0.0")
+@org.osgi.annotation.versioning.Version("0.1.0")
 package org.apache.sling.auth.oauth_client.spi;
