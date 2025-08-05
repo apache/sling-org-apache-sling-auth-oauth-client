@@ -155,6 +155,31 @@ class SlingUserInfoProcessorImplTest {
     }
 
     @Test
+    void testProcessWithIdpInUserNameGroupsInIdToken() throws Exception {
+        // Configure to read groups from ID token
+        SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
+                .convert(Map.of(
+                        "groupsInIdToken", true,
+                        "storeAccessToken", false,
+                        "storeRefreshToken", false,
+                        "idpNameInUserId", true,
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
+                .to(SlingUserInfoProcessorImpl.Config.class);
+        processor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
+
+        // Create ID token with groups
+        List<String> groups = Arrays.asList("admin", "user");
+        String tokenResponse = createTokenResponseWithIdToken(TEST_ACCESS_TOKEN, TEST_REFRESH_TOKEN, groups);
+
+        OidcAuthCredentials result = processor.process(null, tokenResponse, TEST_SUBJECT, TEST_IDP);
+
+        assertNotNull(result);
+        assertEquals(result.getUserId(), TEST_SUBJECT + ";" + TEST_IDP);
+        assertGroupsContain(result.getGroups(), "admin" + ";" + TEST_IDP, "user" + ";" + TEST_IDP);
+    }
+
+    @Test
     void testStoreAccessToken() throws Exception {
         SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
                 .convert(Map.of(
