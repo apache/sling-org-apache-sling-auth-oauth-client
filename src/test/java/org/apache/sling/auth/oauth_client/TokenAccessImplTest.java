@@ -19,10 +19,13 @@
 package org.apache.sling.auth.oauth_client;
 
 import org.apache.sling.auth.oauth_client.impl.MockOidcConnection;
+import org.apache.sling.auth.oauth_client.impl.OAuthException;
+import org.apache.sling.auth.oauth_client.impl.OAuthToken;
 import org.apache.sling.auth.oauth_client.impl.OAuthTokenRefresher;
 import org.apache.sling.auth.oauth_client.impl.OAuthTokenStore;
 import org.apache.sling.auth.oauth_client.impl.OAuthTokens;
 import org.apache.sling.auth.oauth_client.impl.TokenAccessImpl;
+import org.apache.sling.auth.oauth_client.impl.TokenState;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.apache.sling.testing.mock.sling.junit5.SlingContextExtension;
 import org.jetbrains.annotations.NotNull;
@@ -87,7 +90,7 @@ class TokenAccessImplTest {
 
         OAuthTokenStore tokenStore = new InMemoryOAuthTokenStore();
 
-        TokenAccessImpl tokenAccess = getTokenAccess(expiredTokens, refreshedTokens, tokenStore);
+        TokenAccessImpl tokenAccess = getTokenAccess(expiredTokens.refreshToken(), refreshedTokens, tokenStore);
 
         tokenStore.persistTokens(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver(), expiredTokens);
 
@@ -108,13 +111,14 @@ class TokenAccessImplTest {
     }
 
     private static @NotNull TokenAccessImpl getTokenAccess(
-            OAuthTokens expiredTokens, OAuthTokens refreshedTokens, OAuthTokenStore tokenStore) {
+            String expectedRefreshToken, OAuthTokens refreshedTokens, OAuthTokenStore tokenStore) {
         OAuthTokenRefresher tokenRefresher = new OAuthTokenRefresher() {
             @Override
             public @NotNull OAuthTokens refreshTokens(
                     @NotNull ClientConnection connection, @NotNull String refreshToken) {
-                if (!refreshToken.equals(expiredTokens.refreshToken())) {
-                    throw new IllegalArgumentException("Invalid refresh token");
+                if (!refreshToken.equals(expectedRefreshToken)) {
+                    throw new OAuthException("Invalid refresh token. Expected '" + expectedRefreshToken + "' but got '"
+                            + refreshToken + "'");
                 }
                 return refreshedTokens;
             }
@@ -168,5 +172,37 @@ class TokenAccessImplTest {
         tokenAccess.clearAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver());
 
         assertThat(tokenStore.allTokens()).as("all persisted tokens").isEmpty();
+    }
+
+    @Test
+    void refreshToken_invalid() {
+
+        OAuthTokens expiredTokens = new OAuthTokens("access", -1, "refresh");
+        OAuthTokens refreshedTokens = new OAuthTokens("access2", 0, null);
+
+        OAuthTokenStore tokenStore = new InMemoryOAuthTokenStore();
+
+        // ensure that the refresher fails when an unexpected refresh token is used
+        TokenAccessImpl tokenAccess =
+                getTokenAccess("NOT " + expiredTokens.refreshToken(), refreshedTokens, tokenStore);
+
+        tokenStore.persistTokens(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver(), expiredTokens);
+
+        OAuthTokenResponse tokenResponse =
+                tokenAccess.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.request(), "/");
+
+        assertThat(tokenResponse).as("tokenResponse").isNotNull().satisfies(tr -> {
+            assertThat(tr.hasValidToken()).as("hasValidToken").isFalse();
+        });
+
+        assertThat(tokenStore.getRefreshToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver()))
+                .as("refresh token after failed refresh")
+                .extracting(OAuthToken::getState)
+                .isEqualTo(TokenState.MISSING);
+
+        assertThat(tokenStore.getAccessToken(MockOidcConnection.DEFAULT_CONNECTION, slingContext.resourceResolver()))
+                .as("acess token after failed refresh")
+                .extracting(OAuthToken::getState)
+                .isEqualTo(TokenState.MISSING);
     }
 }

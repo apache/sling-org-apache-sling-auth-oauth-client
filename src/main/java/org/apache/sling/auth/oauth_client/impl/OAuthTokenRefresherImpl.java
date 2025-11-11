@@ -27,6 +27,7 @@ import com.nimbusds.oauth2.sdk.ParseException;
 import com.nimbusds.oauth2.sdk.RefreshTokenGrant;
 import com.nimbusds.oauth2.sdk.TokenErrorResponse;
 import com.nimbusds.oauth2.sdk.TokenRequest;
+import com.nimbusds.oauth2.sdk.TokenResponse;
 import com.nimbusds.oauth2.sdk.auth.ClientAuthentication;
 import com.nimbusds.oauth2.sdk.auth.ClientSecretBasic;
 import com.nimbusds.oauth2.sdk.auth.Secret;
@@ -41,11 +42,12 @@ import org.osgi.service.component.annotations.Component;
 public class OAuthTokenRefresherImpl implements OAuthTokenRefresher {
 
     @Override
-    public @NotNull OAuthTokens refreshTokens(@NotNull ClientConnection connection, @NotNull String refreshToken) {
+    public @NotNull OAuthTokens refreshTokens(@NotNull ClientConnection connection, @NotNull String refreshToken)
+            throws OAuthException {
         return Converter.toSlingOAuthTokens(refreshTokensInternal(connection, refreshToken));
     }
 
-    private static @NotNull Tokens refreshTokensInternal(
+    private @NotNull Tokens refreshTokensInternal(
             @NotNull ClientConnection connection, @NotNull String refreshTokenString) throws OAuthException {
         try {
             // Construct the grant from the saved refresh token
@@ -65,14 +67,12 @@ public class OAuthTokenRefresherImpl implements OAuthTokenRefresher {
             // Make the token request
             TokenRequest request = new TokenRequest.Builder(tokenEndpoint, clientAuth, refreshTokenGrant).build();
 
-            AccessTokenResponse response =
-                    AccessTokenResponse.parse(request.toHTTPRequest().send());
+            TokenResponse response = TokenResponse.parse(request.toHTTPRequest().send());
 
             if (!response.indicatesSuccess()) {
-                // We got an error response...
                 TokenErrorResponse errorResponse = response.toErrorResponse();
-                throw new OAuthException("Failed refreshing the access token "
-                        + errorResponse.getErrorObject().getCode() + " : "
+                throw new OAuthException("Failed refreshing the access token. Code: "
+                        + errorResponse.getErrorObject().getCode() + ", description: "
                         + errorResponse.getErrorObject().getDescription());
             }
 

@@ -81,15 +81,26 @@ public class TokenAccessImpl implements OAuthTokenAccess {
                             request.getUserPrincipal());
                 }
 
-                OAuthTokens newTokens = tokenRefresher.refreshTokens(connection, refreshToken.getValue());
-                if (newTokens.refreshToken() == null) {
-                    // retain old refresh token if none was returned
-                    newTokens =
-                            new OAuthTokens(newTokens.accessToken(), newTokens.expiresAt(), refreshToken.getValue());
+                OAuthTokens newTokens;
+                try {
+                    newTokens = tokenRefresher.refreshTokens(connection, refreshToken.getValue());
+                    if (newTokens.refreshToken() == null) {
+                        // retain old refresh token if none was returned but call was successful
+                        newTokens = new OAuthTokens(
+                                newTokens.accessToken(), newTokens.expiresAt(), refreshToken.getValue());
+                    }
+                } catch (OAuthException e) {
+                    logger.warn(
+                            "Failed to refresh access token for connection {} and user {}. Clearing all tokens",
+                            connection.name(),
+                            request.getRemoteUser(),
+                            e);
+                    newTokens = new OAuthTokens(null, 0, null);
                 }
                 tokenStore.persistTokens(connection, resolver, newTokens);
 
-                return new OAuthTokenResponse(Optional.of(newTokens.accessToken()), connection, request, redirectPath);
+                return new OAuthTokenResponse(
+                        Optional.ofNullable(newTokens.accessToken()), connection, request, redirectPath);
             }
         }
 
