@@ -271,10 +271,21 @@
                 <artifactId>bnd-maven-plugin</artifactId>
             </plugin>
             <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!-- workaround for https://github.com/testcontainers/testcontainers-java/issues/11212 -->
+                        <api.version>1.44</api.version>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <plugin>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
                     <systemPropertyVariables>
                         <sling.http.port>${http.port}</sling.http.port>
+                        <!-- workaround for https://github.com/testcontainers/testcontainers-java/issues/11212 -->
+                        <api.version>1.44</api.version>
                     </systemPropertyVariables>
                 </configuration>
                 <executions>
