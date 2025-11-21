@@ -120,7 +120,7 @@ class AuthorizationCodeFlowIT {
         // this is most usually done in an IDE, with both Keycloak and Sling running
         String existingKeyCloakUrl = System.getenv("KEYCLOAK_URL");
         if (existingKeyCloakUrl == null) {
-            keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:20.0.3")
+            keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:26.4")
                     .withRealmImportFile("keycloak-import/sling.json");
             keycloak.start();
             keycloakPort = keycloak.getHttpPort();
