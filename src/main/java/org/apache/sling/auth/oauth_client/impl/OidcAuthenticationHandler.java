@@ -521,6 +521,10 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
             // Extract path and query from the uri
             redirect = request.getRequestURI();
+            String queryString = request.getQueryString();
+            if (queryString != null && !queryString.isEmpty()) {
+                redirect = redirect + "?" + queryString;
+            }
         }
 
         String perRequestKey = new Identifier().getValue();

@@ -1243,4 +1243,50 @@ class OidcAuthenticationHandlerTest {
             return false;
         }));
     }
+
+    @Test
+    void requestCredentialsWithNullOidcRequestPathFallsBackToRequestURIWithParameters() {
+        // This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
+                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[] {"access_type=offline"},
+                oidcProviderMetadataRegistry));
+
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.callbackUri()).thenReturn("http://redirect");
+        when(config.pkceEnabled()).thenReturn(false);
+        when(config.path()).thenReturn(new String[] {"/"});
+
+        // Test with null oidc_request_path parameter - should fall back to requestURI
+        when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn(null);
+        when(request.getRequestURI()).thenReturn("/fallback/path");
+        when(request.getQueryString()).thenReturn("param1=value2&param2=value2");
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
+
+        createOidcAuthenticationHandler();
+        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+
+        // Verify that the request URI is used as fallback in the cookie
+        assertTrue(Arrays.stream(mockResponse.getCookies()).anyMatch(cookie -> {
+            if (OAuthCookieValue.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+                OAuthCookieValue oauthCookieValue = new OAuthCookieValue(cookie.getValue(), cryptoService);
+                assertEquals("/fallback/path?param1=value2&param2=value2", oauthCookieValue.redirect());
+                return true;
+            }
+            return false;
+        }));
+    }
 }
