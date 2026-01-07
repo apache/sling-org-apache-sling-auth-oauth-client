@@ -29,6 +29,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -75,9 +76,13 @@ import org.junit.jupiter.api.io.TempDir;
 
 import static java.lang.String.format;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AuthorizationCodeFlowIT {
+
+    private static final Duration DEFAULT_AWAIT_DURATION = Duration.ofSeconds(10);
+    private static final Duration DEFAULT_AWAIT_INTERVAL = Duration.ofMillis(100);
 
     private static final String IV_GENERATOR_REGISTRAR_PID = JasyptRandomIvGeneratorRegistrar.class.getName();
     private static final String PASSWORD_PROVIDER_PID = EnvironmentVariablePasswordProvider.class.getName();
@@ -85,7 +90,6 @@ class AuthorizationCodeFlowIT {
 
     private static final String OIDC_CONFIG_PID = OidcConnectionImpl.class.getName();
     private static final String OAUTH_CONFIG_PID = OAuthConnectionImpl.class.getName();
-    private static final int MAX_RETRY = 10;
     private static SupportBundle supportBundle;
 
     private static final String OIDC_AUTHENTICATION_HANDLER_PID =
@@ -220,20 +224,20 @@ class AuthorizationCodeFlowIT {
 
         // kick off oidc auth
         // Retry the request a few times to ensure that the osgi configuration have been applied
-        SlingHttpResponse entryPointResponse = null;
-        Header locationHeader = null;
-        for (int count = 0; count < MAX_RETRY; count++) {
-
-            entryPointResponse = sling.doGet(
-                    "/system/sling/oauth/entry-point", List.of(new BasicNameValuePair("c", oidcConnectionName)), 302);
-            locationHeader = entryPointResponse.getFirstHeader("location");
-            if (locationHeader.getValue().startsWith("http://localhost:" + keycloakPort)) {
-                // If the location header starts with the keycloak port, we can break out of the loop
-                break;
-            }
-            // Otherwise, we wait for a while and retry
-            Thread.sleep(100);
-        }
+        SlingHttpResponse entryPointResponse = await("OIDC entry-point redirect")
+                .atMost(DEFAULT_AWAIT_DURATION)
+                .pollInterval(DEFAULT_AWAIT_INTERVAL)
+                .until(
+                        () -> sling.doGet(
+                                "/system/sling/oauth/entry-point",
+                                List.of(new BasicNameValuePair("c", oidcConnectionName)),
+                                302),
+                        response -> {
+                            Header latestLocation = response.getFirstHeader("location");
+                            return latestLocation != null
+                                    && latestLocation.getValue().startsWith("http://localhost:" + keycloakPort);
+                        });
+        Header locationHeader = entryPointResponse.getFirstHeader("location");
 
         assertThat(locationHeader.getElements())
                 .as("Location header value from entry-point request")
@@ -483,20 +487,17 @@ class AuthorizationCodeFlowIT {
         // request
         Header userAgentHeader = new BasicHeader("User-Agent", "Mozilla/5.0");
 
-        SlingHttpResponse entryPointResponse = null;
-        Header locationHeader = null;
         // Retry the request a few times to ensure that the osgi configuration have been applied
-        for (int count = 0; count < MAX_RETRY; count++) {
+        SlingHttpResponse entryPointResponse = await("OIDC handler redirect")
+                .atMost(DEFAULT_AWAIT_DURATION)
+                .pollInterval(DEFAULT_AWAIT_INTERVAL)
+                .until(() -> slingUser.doGet(TEST_PATH + ".json", null, List.of(userAgentHeader), 302), response -> {
+                    Header latestLocation = response.getFirstHeader("location");
+                    return latestLocation != null
+                            && latestLocation.getValue().startsWith("http://localhost:" + keycloakPort);
+                });
 
-            entryPointResponse = slingUser.doGet(TEST_PATH + ".json", null, List.of(userAgentHeader), 302);
-            locationHeader = entryPointResponse.getFirstHeader("location");
-            if (locationHeader.getValue().startsWith("http://localhost:" + keycloakPort)) {
-                // If the location header starts with the keycloak port, we can break out of the loop
-                break;
-            }
-            // Otherwise, we wait for a while and retry
-            Thread.sleep(100);
-        }
+        Header locationHeader = entryPointResponse.getFirstHeader("location");
         assertThat(locationHeader.getElements())
                 .as("Location header value from entry-point request")
                 .singleElement()
