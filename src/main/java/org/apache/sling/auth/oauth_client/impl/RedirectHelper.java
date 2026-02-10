@@ -44,7 +44,9 @@ class RedirectHelper {
     // We don't want leave the cookie lying around for a long time because it is not needed.
     // At the same time, some OAuth user authentication flows take a long time due to
     // consent, account selection, 2FA, etc. so we cannot make this too short.
-    private static final int COOKIE_MAX_AGE_SECONDS = 300;
+    /** Default max age in seconds for the sling.oauth-request-key cookie. Used when not configured by the handler. */
+    public static final int DEFAULT_REQUEST_KEY_COOKIE_MAX_AGE_SECONDS = 300;
+
     private static final Logger logger = LoggerFactory.getLogger(RedirectHelper.class);
 
     private RedirectHelper() {
@@ -57,13 +59,17 @@ class RedirectHelper {
             @NotNull ResolvedConnection conn,
             @NotNull OAuthCookieValue oAuthCookieValue,
             @NotNull CryptoService cryptoService,
-            @Nullable String[] resource) {
+            @Nullable String[] resource,
+            int requestKeyCookieMaxAgeSeconds) {
 
         String path = findLongestPathMatching(paths, callbackUri.getPath());
 
         // Set the cookie with state, connection name, redirect uri, nonce and codeverifier
         Cookie requestKeyCookie = buildCookie(
-                path, OAuthCookieValue.COOKIE_NAME_REQUEST_KEY, cryptoService.encrypt(oAuthCookieValue.getValue()));
+                path,
+                OAuthCookieValue.COOKIE_NAME_REQUEST_KEY,
+                cryptoService.encrypt(oAuthCookieValue.getValue()),
+                requestKeyCookieMaxAgeSeconds);
 
         // We build th redirect url to be sent to the browser
         URI authorizationEndpointUri = URI.create(conn.authorizationEndpoint());
@@ -111,11 +117,12 @@ class RedirectHelper {
         return new RedirectTarget(uri, requestKeyCookie);
     }
 
-    private static @NotNull Cookie buildCookie(@Nullable String path, @NotNull String name, @NotNull String value) {
+    private static @NotNull Cookie buildCookie(
+            @Nullable String path, @NotNull String name, @NotNull String value, int maxAgeSeconds) {
         Cookie cookie = new Cookie(name, value);
         cookie.setHttpOnly(true);
         cookie.setSecure(true);
-        cookie.setMaxAge(COOKIE_MAX_AGE_SECONDS);
+        cookie.setMaxAge(maxAgeSeconds);
         if (path != null) cookie.setPath(path);
         return cookie;
     }

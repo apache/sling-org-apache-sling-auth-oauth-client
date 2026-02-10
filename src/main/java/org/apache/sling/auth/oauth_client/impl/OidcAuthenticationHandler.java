@@ -111,6 +111,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private final String[] resource;
 
+    private final int requestKeyCookieMaxAgeSeconds;
+
     private final CryptoService cryptoService;
 
     @ObjectClassDefinition(
@@ -148,6 +150,14 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                         + "Multiple values can be specified.",
                 cardinality = Integer.MAX_VALUE)
         String[] resource() default {};
+
+        @AttributeDefinition(
+                name = "Request key cookie max age (seconds)",
+                description = "Max age in seconds for the sling.oauth-request-key cookie used during the OIDC "
+                        + "authentication flow. The cookie holds state between the redirect to the IdP and the "
+                        + "callback. Default is 300 (5 minutes). Use a higher value if users often take longer "
+                        + "(e.g. consent, 2FA).")
+        int requestKeyCookieMaxAgeSeconds() default RedirectHelper.DEFAULT_REQUEST_KEY_COOKIE_MAX_AGE_SECONDS;
     }
 
     @Activate
@@ -170,6 +180,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.pkceEnabled = config.pkceEnabled();
         this.path = config.path();
         this.resource = config.resource();
+        this.requestKeyCookieMaxAgeSeconds = config.requestKeyCookieMaxAgeSeconds();
         this.cryptoService = cryptoService;
 
         logger.debug("activate: registering ExternalIdentityProvider");
@@ -548,7 +559,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         OAuthCookieValue oAuthCookieValue =
                 new OAuthCookieValue(perRequestKey, connection.name(), redirect, nonce, codeVerifier);
 
-        return RedirectHelper.buildRedirectTarget(path, callbackUri, conn, oAuthCookieValue, cryptoService, resource);
+        return RedirectHelper.buildRedirectTarget(
+                path, callbackUri, conn, oAuthCookieValue, cryptoService, resource, requestKeyCookieMaxAgeSeconds);
     }
 
     @Override

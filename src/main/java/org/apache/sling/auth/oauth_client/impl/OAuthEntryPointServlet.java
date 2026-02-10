@@ -40,6 +40,9 @@ import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.metatype.annotations.AttributeDefinition;
+import org.osgi.service.metatype.annotations.Designate;
+import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,6 +51,7 @@ import static org.osgi.service.component.annotations.ReferencePolicyOption.GREED
 @Component(
         service = {Servlet.class},
         property = {AuthConstants.AUTH_REQUIREMENTS + "=" + OAuthEntryPointServlet.PATH})
+@Designate(ocd = OAuthEntryPointServlet.Config.class)
 @SlingServletPaths(OAuthEntryPointServlet.PATH)
 public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
 
@@ -61,12 +65,29 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
 
     private final CryptoService cryptoService;
 
+    private final int requestKeyCookieMaxAgeSeconds;
+
+    @ObjectClassDefinition(
+            name = "Apache Sling OAuth Entry Point Servlet",
+            description = "OAuth entry point servlet for initiating the OAuth authentication flow.")
+    @interface Config {
+        @AttributeDefinition(
+                name = "Request key cookie max age (seconds)",
+                description = "Max age in seconds for the sling.oauth-request-key cookie used during the OAuth "
+                        + "authentication flow. The cookie holds state between the redirect to the IdP and the "
+                        + "callback. Default is 300 (5 minutes). Use a higher value if users often take longer "
+                        + "(e.g. consent, 2FA).")
+        int requestKeyCookieMaxAgeSeconds() default RedirectHelper.DEFAULT_REQUEST_KEY_COOKIE_MAX_AGE_SECONDS;
+    }
+
     @Activate
     public OAuthEntryPointServlet(
             @Reference(policyOption = GREEDY) List<ClientConnection> connections,
-            @Reference CryptoService cryptoService) {
+            @Reference CryptoService cryptoService,
+            Config config) {
         this.connections = connections.stream().collect(Collectors.toMap(ClientConnection::name, Function.identity()));
         this.cryptoService = cryptoService;
+        this.requestKeyCookieMaxAgeSeconds = config.requestKeyCookieMaxAgeSeconds();
     }
 
     @Override
@@ -116,6 +137,12 @@ public class OAuthEntryPointServlet extends SlingAllMethodsServlet {
         OAuthCookieValue oAuthCookieValue = new OAuthCookieValue(perRequestKey, connection.name(), redirect);
 
         return RedirectHelper.buildRedirectTarget(
-                new String[] {PATH}, callbackUri, conn, oAuthCookieValue, cryptoService, null);
+                new String[] {PATH},
+                callbackUri,
+                conn,
+                oAuthCookieValue,
+                cryptoService,
+                null,
+                requestKeyCookieMaxAgeSeconds);
     }
 }

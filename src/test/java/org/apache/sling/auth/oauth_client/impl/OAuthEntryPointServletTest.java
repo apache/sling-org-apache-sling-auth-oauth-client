@@ -19,6 +19,7 @@
 package org.apache.sling.auth.oauth_client.impl;
 
 import javax.servlet.ServletException;
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
@@ -36,7 +37,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(SlingContextExtension.class)
 class OAuthEntryPointServletTest {
@@ -57,7 +61,10 @@ class OAuthEntryPointServletTest {
                         "client-secret",
                         "http://example.com",
                         new String[] {"access_type=offline"}));
-        servlet = new OAuthEntryPointServlet(connections, new StubCryptoService());
+        OAuthEntryPointServlet.Config config = mock(OAuthEntryPointServlet.Config.class);
+        when(config.requestKeyCookieMaxAgeSeconds())
+                .thenReturn(RedirectHelper.DEFAULT_REQUEST_KEY_COOKIE_MAX_AGE_SECONDS);
+        servlet = new OAuthEntryPointServlet(connections, new StubCryptoService(), config);
     }
 
     @Test
@@ -189,5 +196,25 @@ class OAuthEntryPointServletTest {
         servlet.service(context.request(), response);
 
         assertThat(context.response().getStatus()).as("response code").isEqualTo(HttpServletResponse.SC_BAD_REQUEST);
+    }
+
+    @Test
+    void usesConfiguredCookieMaxAge() throws ServletException, IOException {
+        int customMaxAge = 600;
+        OAuthEntryPointServlet.Config config = mock(OAuthEntryPointServlet.Config.class);
+        when(config.requestKeyCookieMaxAgeSeconds()).thenReturn(customMaxAge);
+        OAuthEntryPointServlet servletWithCustomConfig = new OAuthEntryPointServlet(
+                Arrays.asList(MockOidcConnection.DEFAULT_CONNECTION), new StubCryptoService(), config);
+
+        context.request().setQueryString("c=" + MockOidcConnection.DEFAULT_CONNECTION.name());
+        MockSlingHttpServletResponse response = context.response();
+
+        servletWithCustomConfig.service(context.request(), response);
+
+        Cookie requestKeyCookie = Arrays.stream(response.getCookies())
+                .filter(c -> OAuthCookieValue.COOKIE_NAME_REQUEST_KEY.equals(c.getName()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(customMaxAge, requestKeyCookie.getMaxAge());
     }
 }

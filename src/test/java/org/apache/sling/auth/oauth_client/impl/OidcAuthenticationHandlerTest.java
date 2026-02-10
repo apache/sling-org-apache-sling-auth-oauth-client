@@ -102,6 +102,7 @@ class OidcAuthenticationHandlerTest {
         config = mock(OidcAuthenticationHandler.Config.class);
         when(config.idp()).thenReturn("myIdP");
         when(config.path()).thenReturn(new String[] {"/"});
+        when(config.requestKeyCookieMaxAgeSeconds()).thenReturn(300);
         loginCookieManager = mock(LoginCookieManager.class);
 
         SlingUserInfoProcessorImpl.Config userInfoConfig = Converters.standardConverter()
