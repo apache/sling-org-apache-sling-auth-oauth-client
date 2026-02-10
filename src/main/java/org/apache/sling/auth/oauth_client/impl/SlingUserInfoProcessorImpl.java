@@ -134,7 +134,9 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
             });
         }
 
-        if (groupsInIdToken) {
+        // Remark that if SlingUserProcessor is executed from OidcBearerAuthenticationHAndler, the IDToke is null
+        if (groupsInIdToken
+                && tokenResponse.toSuccessResponse().getTokens().toOIDCTokens().getIDToken() != null) {
             // If groups are in ID Token, add them to the credentials
             try {
                 Object groups = tokenResponse

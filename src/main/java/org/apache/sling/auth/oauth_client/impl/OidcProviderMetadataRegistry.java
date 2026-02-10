@@ -71,4 +71,8 @@ public class OidcProviderMetadataRegistry {
     public @NotNull String getIssuer(@NotNull String base) {
         return getProviderMetadata(base).getIssuer().getValue();
     }
+
+    public URI getIntrospectionEndpoint(@NotNull String base) {
+        return getProviderMetadata(base).getIntrospectionEndpointURI();
+    }
 }

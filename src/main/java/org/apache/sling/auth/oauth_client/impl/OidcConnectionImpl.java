@@ -52,6 +52,8 @@ public class OidcConnectionImpl implements ClientConnection {
 
         String issuer();
 
+        String introspectionEndpoint();
+
         String clientId();
 
         @AttributeDefinition(type = AttributeType.PASSWORD)
@@ -72,6 +74,7 @@ public class OidcConnectionImpl implements ClientConnection {
     private final String userInfoUrl;
     private final String jwkSetURL;
     private final String issuer;
+    private final String introspectionEndpoint;
     private final boolean hasBaseUrl;
 
     @Activate
@@ -83,6 +86,7 @@ public class OidcConnectionImpl implements ClientConnection {
         this.userInfoUrl = cfg.userInfoUrl();
         this.jwkSetURL = cfg.jwkSetURL();
         this.issuer = cfg.issuer();
+        this.introspectionEndpoint = cfg.introspectionEndpoint();
 
         // Validate configuration: either baseUrl is provided OR all explicit endpoints are provided
         hasBaseUrl = !isNullOrEmpty(cfg.baseUrl());
@@ -203,5 +207,17 @@ public class OidcConnectionImpl implements ClientConnection {
             return metadataRegistry.getIssuer(cfg.baseUrl());
         }
         return issuer;
+    }
+
+    java.net.URI introspectionEndpoint() {
+        if (!isNullOrEmpty(introspectionEndpoint)) {
+            // Use explicitly configured endpoint
+            return java.net.URI.create(introspectionEndpoint);
+        }
+        if (hasBaseUrl) {
+            // Auto-discover from metadata
+            return metadataRegistry.getIntrospectionEndpoint(cfg.baseUrl());
+        }
+        return null; // Not available without baseUrl or explicit config
     }
 }
