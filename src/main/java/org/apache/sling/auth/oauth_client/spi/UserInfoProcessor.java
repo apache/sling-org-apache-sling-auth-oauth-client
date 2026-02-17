@@ -47,6 +47,20 @@ public interface UserInfoProcessor {
             @Nullable String userInfo, @NotNull String tokenResponse, @NotNull String oidcSubject, @NotNull String idp)
             throws RuntimeException;
 
+    /**
+     * Clean up user data after logout. This method is called by the OIDC authentication handler
+     * during the logout process to remove sensitive data such as access tokens, refresh tokens,
+     * and ID tokens from persistent storage.
+     * <p>
+     * Implementations should remove stored tokens from the user's profile in the repository
+     * to ensure they cannot be reused after logout.
+     *
+     * @param userId the user identifier (e.g., from request.getRemoteUser())
+     */
+    default void cleanupUserData(@NotNull String userId) {
+        // Default implementation does nothing for backward compatibility
+    }
+
     @NotNull
     String connection();
 }

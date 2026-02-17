@@ -70,6 +70,7 @@ class SlingLoginCookieManagerTest {
         when(config.form_token_fastseed()).thenReturn(false);
         when(config.sessionTimeout()).thenReturn(8 * 60 * 60 * 1000L);
         when(config.cookieName()).thenReturn(COOKIE_NAME);
+        when(config.idpName()).thenReturn("test-idp");
 
         slingLoginCookieManager = new SlingLoginCookieManager(config, osgiContext.bundleContext());
     }

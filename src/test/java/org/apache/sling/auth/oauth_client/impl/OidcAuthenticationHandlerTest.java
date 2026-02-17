@@ -72,6 +72,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(OsgiContextExtension.class)
@@ -91,6 +93,7 @@ class OidcAuthenticationHandlerTest {
     private HttpServletResponse response;
     private HttpServer tokenEndpointServer;
     private CryptoService cryptoService = new StubCryptoService();
+    private org.apache.sling.jcr.api.SlingRepository repository;
     HttpServer idpServer;
 
     @BeforeEach
@@ -104,22 +107,27 @@ class OidcAuthenticationHandlerTest {
         when(config.path()).thenReturn(new String[] {"/"});
         when(config.requestKeyCookieMaxAgeSeconds()).thenReturn(300);
         loginCookieManager = mock(LoginCookieManager.class);
+        repository = mock(org.apache.sling.jcr.api.SlingRepository.class);
 
         SlingUserInfoProcessorImpl.Config userInfoConfig = Converters.standardConverter()
                 .convert(Map.of(
                         "storeAccessToken", false,
                         "storeRefreshToken", false,
-                        "connection", "mock-oidc-param",
+                        "connection", MOCK_OIDC_PARAM, // Match MOCK_OIDC_PARAM constant
                         "groupsInIdToken", false,
                         "groupsClaimName", "groups"))
                 .to(SlingUserInfoProcessorImpl.Config.class);
 
-        UserInfoProcessor userInfoProcessor = new SlingUserInfoProcessorImpl(mock(CryptoService.class), userInfoConfig);
+        UserInfoProcessor userInfoProcessor =
+                new SlingUserInfoProcessorImpl(mock(CryptoService.class), null, userInfoConfig);
         userInfoProcessors = new ArrayList<>();
         userInfoProcessors.add(userInfoProcessor);
 
         when(config.userInfoEnabled()).thenReturn(true);
         when(config.pkceEnabled()).thenReturn(false);
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(false);
+        when(config.logoutRedirectPath()).thenReturn("/");
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {});
         connections = new ArrayList<>();
         connections.add(MockOidcConnection.DEFAULT_CONNECTION);
 
@@ -831,7 +839,7 @@ class OidcAuthenticationHandlerTest {
 
     private void createOidcAuthenticationHandler() {
         oidcAuthenticationHandler = new OidcAuthenticationHandler(
-                bundleContext, connections, config, loginCookieManager, userInfoProcessors, cryptoService);
+                bundleContext, connections, config, loginCookieManager, userInfoProcessors, cryptoService, repository);
     }
 
     private HttpServer createHttpServer() throws IOException {
@@ -1040,9 +1048,302 @@ class OidcAuthenticationHandlerTest {
     }
 
     @Test
-    void dropCredentials() {
-        // TODO this test doesn't verify anything
+    void dropCredentials() throws IOException {
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"localhost"});
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+        when(request.getContextPath()).thenReturn("");
+
+        createOidcAuthenticationHandler();
         oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(loginCookieManager).clearLoginCookie(request, response);
+        verify(response).sendRedirect("http://localhost:8080/");
+    }
+
+    @Test
+    void dropCredentials_redirectsToIdpEndSessionWhenConfigured() throws IOException {
+        String endSessionUrl = "https://idp.example.com/oidc/logout";
+        connections.clear();
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "https://idp.example.com",
+                new String[0],
+                null,
+                endSessionUrl));
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"myapp.example.com"});
+        when(request.getScheme()).thenReturn("https");
+        when(request.getServerName()).thenReturn("myapp.example.com");
+        when(request.getServerPort()).thenReturn(443);
+        when(request.getContextPath()).thenReturn("");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(loginCookieManager).clearLoginCookie(request, response);
+        verify(response).sendRedirect(anyString());
+        // Redirect must be to IdP end_session with post_logout_redirect_uri
+        org.mockito.ArgumentCaptor<String> redirectCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(response).sendRedirect(redirectCaptor.capture());
+        String redirectUrl = redirectCaptor.getValue();
+        assertTrue(redirectUrl.startsWith(endSessionUrl), "Redirect should go to IdP end_session: " + redirectUrl);
+        assertTrue(
+                redirectUrl.contains("post_logout_redirect_uri="),
+                "Redirect should contain post_logout_redirect_uri: " + redirectUrl);
+        assertTrue(
+                redirectUrl.contains("https%3A%2F%2Fmyapp.example.com%2F"),
+                "post_logout_redirect_uri should point to app: " + redirectUrl);
+    }
+
+    @Test
+    void dropCredentials_doesNotRedirectWhenResponseAlreadyCommitted() throws IOException {
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+        when(request.getContextPath()).thenReturn("");
+        when(response.isCommitted()).thenReturn(true);
+
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(loginCookieManager).clearLoginCookie(request, response);
+        verify(response, never()).sendRedirect(anyString());
+    }
+
+    @Test
+    void dropCredentials_usesCustomLogoutRedirectPath() throws IOException {
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"localhost"});
+        when(config.logoutRedirectPath()).thenReturn("/goodbye");
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+        when(request.getContextPath()).thenReturn("");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(response).sendRedirect("http://localhost:8080/goodbye");
+    }
+
+    @Test
+    void dropCredentials_allowedHostsReplacesSpoofedHost() throws IOException {
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"safe.example.com", "other.example.com"});
+        when(request.getScheme()).thenReturn("https");
+        when(request.getServerName()).thenReturn("evil.com");
+        when(request.getServerPort()).thenReturn(443);
+        when(request.getContextPath()).thenReturn("");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(response).sendRedirect(anyString());
+        org.mockito.ArgumentCaptor<String> redirectCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(response).sendRedirect(redirectCaptor.capture());
+        String redirectUrl = redirectCaptor.getValue();
+        assertTrue(
+                redirectUrl.contains("safe.example.com") || redirectUrl.contains("other.example.com"),
+                "Redirect should use an allowed host instead of spoofed: " + redirectUrl);
+        assertFalse(redirectUrl.contains("evil.com"), "Redirect must not use spoofed host: " + redirectUrl);
+    }
+
+    @Test
+    void dropCredentials_allowedHostsAllowsConfiguredHost() throws IOException {
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"localhost", "myapp.example.com"});
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+        when(request.getContextPath()).thenReturn("");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(response).sendRedirect("http://localhost:8080/");
+    }
+
+    @Test
+    void dropCredentials_loginCookieManagerNull_doesNotThrowAndRedirects() throws IOException {
+        loginCookieManager = null;
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"localhost"});
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+        when(request.getContextPath()).thenReturn("");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(response).sendRedirect("http://localhost:8080/");
+    }
+
+    @Test
+    void dropCredentials_contextPathPrependedToLogoutPath() throws IOException {
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"localhost"});
+        when(config.logoutRedirectPath()).thenReturn("/goodbye");
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+        when(request.getContextPath()).thenReturn("/ctx");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(response).sendRedirect("http://localhost:8080/ctx/goodbye");
+    }
+
+    @Test
+    void dropCredentials_withRelativeRedirectParameter() throws IOException {
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"localhost"});
+        when(config.logoutRedirectPath()).thenReturn("/default");
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+        when(request.getContextPath()).thenReturn("");
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn("/custom/logout/page");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(response).sendRedirect("http://localhost:8080/custom/logout/page");
+    }
+
+    @Test
+    void dropCredentials_withAbsoluteRedirectParameter_fallsBackToConfigured() throws IOException {
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"localhost"});
+        when(config.logoutRedirectPath()).thenReturn("/default");
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+        when(request.getContextPath()).thenReturn("");
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn("https://evil.com/malicious");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        // Absolute URLs are not allowed; should fall back to configured logoutRedirectPath
+        verify(response).sendRedirect("http://localhost:8080/default");
+    }
+
+    @Test
+    void dropCredentials_withInvalidRedirectParameter_fallsBackToConfigured() throws IOException {
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"localhost"});
+        when(config.logoutRedirectPath()).thenReturn("/default");
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+        when(request.getContextPath()).thenReturn("");
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn("//evil.com/malicious");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        // Should fall back to configured logoutRedirectPath
+        verify(response).sendRedirect("http://localhost:8080/default");
+    }
+
+    @Test
+    void dropCredentials_withEmptyRedirectParameter_usesConfigured() throws IOException {
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"localhost"});
+        when(config.logoutRedirectPath()).thenReturn("/default");
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+        when(request.getContextPath()).thenReturn("");
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn("");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(response).sendRedirect("http://localhost:8080/default");
+    }
+
+    @Test
+    void dropCredentials_withRelativeRedirectParameter_contextPathPrepended() throws IOException {
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"localhost"});
+        when(config.logoutRedirectPath()).thenReturn("/default");
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+        when(request.getContextPath()).thenReturn("/myapp");
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn("/custom/logout");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(response).sendRedirect("http://localhost:8080/myapp/custom/logout");
+    }
+
+    @Test
+    void dropCredentials_withRelativeRedirectParameter_disallowedRequestHost_usesSafeHost() throws IOException {
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"safe.example.com"});
+        when(config.logoutRedirectPath()).thenReturn("/default");
+        when(request.getScheme()).thenReturn("https");
+        when(request.getServerName()).thenReturn("evil.com");
+        when(request.getServerPort()).thenReturn(443);
+        when(request.getContextPath()).thenReturn("");
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn("/custom/logout");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        // Relative redirect with spoofed host should use safe host
+        verify(response).sendRedirect("https://safe.example.com/custom/logout");
+    }
+
+    @Test
+    void dropCredentials_withRedirectParameter_redirectsToIdpEndSessionWhenConfigured() throws IOException {
+        String endSessionUrl = "https://idp.example.com/oidc/logout";
+        connections.clear();
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "https://idp.example.com",
+                new String[0],
+                null,
+                endSessionUrl));
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+        when(config.enableSPInitiatedSingleLogout()).thenReturn(true);
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {"myapp.example.com"});
+        when(request.getScheme()).thenReturn("https");
+        when(request.getServerName()).thenReturn("myapp.example.com");
+        when(request.getServerPort()).thenReturn(443);
+        when(request.getContextPath()).thenReturn("");
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn("/custom/goodbye");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(loginCookieManager).clearLoginCookie(request, response);
+        verify(response).sendRedirect(anyString());
+        // Redirect must be to IdP end_session with post_logout_redirect_uri using custom path
+        org.mockito.ArgumentCaptor<String> redirectCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(response).sendRedirect(redirectCaptor.capture());
+        String redirectUrl = redirectCaptor.getValue();
+        assertTrue(redirectUrl.startsWith(endSessionUrl), "Redirect should go to IdP end_session: " + redirectUrl);
+        assertTrue(
+                redirectUrl.contains("post_logout_redirect_uri="),
+                "Redirect should contain post_logout_redirect_uri: " + redirectUrl);
+        assertTrue(
+                redirectUrl.contains("https%3A%2F%2Fmyapp.example.com%2Fcustom%2Fgoodbye"),
+                "post_logout_redirect_uri should point to custom path: " + redirectUrl);
     }
 
     @Test
@@ -1494,5 +1795,766 @@ class OidcAuthenticationHandlerTest {
         // Count occurrences of "resource=" - should be exactly 1
         int count = location.split("resource=", -1).length - 1;
         assertEquals(1, count, "Expected exactly one resource parameter but found " + count);
+    }
+
+    @Test
+    void testDropCredentialsCallsCleanupUserTokens() throws Exception {
+        // Setup request with user
+        when(request.getRemoteUser()).thenReturn("testUser");
+        when(response.isCommitted()).thenReturn(false);
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+
+        // Setup configs - SP-initiated logout disabled by default
+        when(config.logoutRedirectPath()).thenReturn("/");
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {});
+
+        // Create UserInfoProcessor mock that we can verify
+        // Must match MOCK_OIDC_PARAM used in most tests
+        UserInfoProcessor mockProcessor = mock(UserInfoProcessor.class);
+        when(mockProcessor.connection()).thenReturn(MOCK_OIDC_PARAM);
+
+        // Use a connection with MOCK_OIDC_PARAM name
+        connections.clear();
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "https://example.com",
+                new String[0]));
+
+        // Add processor to handler
+        userInfoProcessors.clear();
+        userInfoProcessors.add(mockProcessor);
+
+        createOidcAuthenticationHandler();
+
+        // Execute dropCredentials
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        // Verify cleanup was called on processor
+        verify(mockProcessor).cleanupUserData("testUser");
+
+        // Verify response was NOT redirected (SP-initiated logout disabled)
+        verify(response, never()).sendRedirect(anyString());
+    }
+
+    @Test
+    void testDropCredentialsWithMultipleProcessors() {
+        // Setup request with user
+        when(request.getRemoteUser()).thenReturn("testUser");
+        when(response.isCommitted()).thenReturn(false);
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+
+        // Setup configs
+        when(config.logoutRedirectPath()).thenReturn("/");
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {});
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+
+        // Create multiple UserInfoProcessor mocks
+        // mockProcessor1 matches MOCK_OIDC_PARAM connection
+        UserInfoProcessor mockProcessor1 = mock(UserInfoProcessor.class);
+        when(mockProcessor1.connection()).thenReturn(MOCK_OIDC_PARAM);
+
+        // mockProcessor2 has a different connection name
+        UserInfoProcessor mockProcessor2 = mock(UserInfoProcessor.class);
+        when(mockProcessor2.connection()).thenReturn("connection2");
+
+        // Use connection with MOCK_OIDC_PARAM name
+        connections.clear();
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "https://example.com",
+                new String[0]));
+
+        // Add processors to handler
+        userInfoProcessors.clear();
+        userInfoProcessors.add(mockProcessor1);
+        userInfoProcessors.add(mockProcessor2);
+
+        createOidcAuthenticationHandler();
+
+        // Execute dropCredentials
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        // Verify cleanup was called ONLY on the processor matching the resolved connection
+        verify(mockProcessor1).cleanupUserData("testUser");
+        // mockProcessor2 should NOT be called since it's for a different connection
+        verify(mockProcessor2, never()).cleanupUserData(anyString());
+    }
+
+    @Test
+    void testDropCredentialsWithProcessorException() throws Exception {
+        // Setup request with user
+        when(request.getRemoteUser()).thenReturn("testUser");
+        when(response.isCommitted()).thenReturn(false);
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+
+        // Setup configs - SP-initiated logout disabled by default
+        when(config.logoutRedirectPath()).thenReturn("/");
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {});
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+
+        // Create processor that throws exception for the connection
+        UserInfoProcessor mockProcessor = mock(UserInfoProcessor.class);
+        when(mockProcessor.connection()).thenReturn(MOCK_OIDC_PARAM);
+        doThrow(new RuntimeException("Test exception")).when(mockProcessor).cleanupUserData(anyString());
+
+        // Use connection with MOCK_OIDC_PARAM name
+        connections.clear();
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "https://example.com",
+                new String[0]));
+
+        // Add processor to handler
+        userInfoProcessors.clear();
+        userInfoProcessors.add(mockProcessor);
+
+        createOidcAuthenticationHandler();
+
+        // Execute dropCredentials - should not throw (exception is caught and logged)
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        // Verify processor was called (exception doesn't stop logout flow)
+        verify(mockProcessor).cleanupUserData("testUser");
+
+        // Verify response was NOT redirected (SP-initiated logout disabled)
+        verify(response, never()).sendRedirect(anyString());
+    }
+
+    @Test
+    void testDropCredentialsWithNoUser() throws Exception {
+        // Setup request without user
+        when(request.getRemoteUser()).thenReturn(null);
+        when(response.isCommitted()).thenReturn(false);
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+
+        // Setup configs - SP-initiated logout disabled by default
+        when(config.logoutRedirectPath()).thenReturn("/");
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {});
+
+        // Create processor mock
+        UserInfoProcessor mockProcessor = mock(UserInfoProcessor.class);
+        when(mockProcessor.connection()).thenReturn("test-connection");
+
+        userInfoProcessors.clear();
+        userInfoProcessors.add(mockProcessor);
+
+        createOidcAuthenticationHandler();
+
+        // Execute dropCredentials
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        // Verify cleanup was NOT called (no user)
+        verify(mockProcessor, never()).cleanupUserData(anyString());
+
+        // Verify response was NOT redirected (SP-initiated logout disabled)
+        verify(response, never()).sendRedirect(anyString());
+    }
+
+    @Test
+    void testDropCredentialsWithEmptyUserId() throws Exception {
+        // Setup request with empty user
+        when(request.getRemoteUser()).thenReturn("");
+        when(response.isCommitted()).thenReturn(false);
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+
+        // Setup configs - SP-initiated logout disabled by default
+        when(config.logoutRedirectPath()).thenReturn("/");
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {});
+
+        // Create processor mock
+        UserInfoProcessor mockProcessor = mock(UserInfoProcessor.class);
+        when(mockProcessor.connection()).thenReturn("test-connection");
+
+        userInfoProcessors.clear();
+        userInfoProcessors.add(mockProcessor);
+
+        createOidcAuthenticationHandler();
+
+        // Execute dropCredentials
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        // Verify cleanup was NOT called (empty user)
+        verify(mockProcessor, never()).cleanupUserData(anyString());
+
+        // Verify response was NOT redirected (SP-initiated logout disabled)
+        verify(response, never()).sendRedirect(anyString());
+    }
+
+    @Test
+    void testDropCredentialsWithNoProcessors() throws Exception {
+        // Setup request with user
+        when(request.getRemoteUser()).thenReturn("testUser");
+        when(response.isCommitted()).thenReturn(false);
+        when(request.getScheme()).thenReturn("http");
+        when(request.getServerName()).thenReturn("localhost");
+        when(request.getServerPort()).thenReturn(8080);
+
+        // Setup configs - SP-initiated logout disabled by default
+        when(config.logoutRedirectPath()).thenReturn("/");
+        when(config.logoutRedirectAllowedHosts()).thenReturn(new String[] {});
+
+        // No processors
+        userInfoProcessors.clear();
+
+        createOidcAuthenticationHandler();
+
+        // Execute dropCredentials - should not throw
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        // Verify response was NOT redirected (SP-initiated logout disabled)
+        verify(response, never()).sendRedirect(anyString());
+    }
+
+    @Test
+    void testDropCredentialsWhenResponseCommitted() throws Exception {
+        // Setup request with user
+        when(request.getRemoteUser()).thenReturn("testUser");
+        when(response.isCommitted()).thenReturn(true); // Response already committed
+
+        // Setup configs
+        when(config.logoutRedirectPath()).thenReturn("/");
+        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
+
+        // Create processor mock - must match MOCK_OIDC_PARAM
+        UserInfoProcessor mockProcessor = mock(UserInfoProcessor.class);
+        when(mockProcessor.connection()).thenReturn(MOCK_OIDC_PARAM);
+
+        // Use connection with MOCK_OIDC_PARAM name
+        connections.clear();
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "https://example.com",
+                new String[0]));
+
+        userInfoProcessors.clear();
+        userInfoProcessors.add(mockProcessor);
+
+        createOidcAuthenticationHandler();
+
+        // Execute dropCredentials
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        // Verify cleanup was still called even though response is committed
+        verify(mockProcessor).cleanupUserData("testUser");
+
+        // Verify NO redirect attempt (response committed)
+        verify(response, never()).sendRedirect(anyString());
+    }
+
+    // ========== Tests for getIdTokenFromOak method ==========
+
+    @Test
+    void testGetIdTokenFromOak_ServiceSessionNull() throws Exception {
+        // Setup mocks
+        org.apache.sling.jcr.api.SlingRepository mockSlingRepo = mock(org.apache.sling.jcr.api.SlingRepository.class);
+
+        // Mock repository to return null session
+        when(mockSlingRepo.loginService("test-service-user", null)).thenReturn(null);
+
+        // Setup configs
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("path", "/test");
+        configMap.put("enableSPInitiatedSingleLogout", true);
+        configMap.put("logoutRedirectAllowedHosts", new String[] {"localhost"});
+        configMap.put("logoutServiceUserName", "test-service-user");
+        config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
+
+        // Create handler with mock repository
+        oidcAuthenticationHandler = new OidcAuthenticationHandler(
+                bundleContext,
+                connections,
+                config,
+                loginCookieManager,
+                userInfoProcessors,
+                cryptoService,
+                mockSlingRepo);
+
+        // Use reflection to call private method
+        // Access logoutHandler field via reflection
+        java.lang.reflect.Field logoutHandlerField = OidcAuthenticationHandler.class.getDeclaredField("logoutHandler");
+        logoutHandlerField.setAccessible(true);
+        OidcLogoutHandler logoutHandler = (OidcLogoutHandler) logoutHandlerField.get(oidcAuthenticationHandler);
+        String result = logoutHandler.getIdTokenFromOak("testUser");
+
+        // Verify returns null when service session is null
+        assertNull(result, "Should return null when service session is null");
+    }
+
+    @Test
+    void testGetIdTokenFromOak_UserNotFound() throws Exception {
+        // Setup mocks
+        org.apache.sling.jcr.api.SlingRepository mockSlingRepo = mock(org.apache.sling.jcr.api.SlingRepository.class);
+        org.apache.jackrabbit.api.JackrabbitSession mockSession =
+                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
+        org.apache.jackrabbit.api.security.user.UserManager mockUserManager =
+                mock(org.apache.jackrabbit.api.security.user.UserManager.class);
+
+        // Mock repository and session
+        when(mockSlingRepo.loginService("test-service-user", null)).thenReturn(mockSession);
+        when(mockSession.getUserManager()).thenReturn(mockUserManager);
+        when(mockUserManager.getAuthorizable("testUser")).thenReturn(null);
+
+        // Setup configs
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("path", "/test");
+        configMap.put("enableSPInitiatedSingleLogout", true);
+        configMap.put("logoutRedirectAllowedHosts", new String[] {"localhost"});
+        configMap.put("logoutServiceUserName", "test-service-user");
+        config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
+
+        // Create handler
+        oidcAuthenticationHandler = new OidcAuthenticationHandler(
+                bundleContext,
+                connections,
+                config,
+                loginCookieManager,
+                userInfoProcessors,
+                cryptoService,
+                mockSlingRepo);
+
+        // Use reflection to call private method
+        // Access logoutHandler field via reflection
+        java.lang.reflect.Field logoutHandlerField = OidcAuthenticationHandler.class.getDeclaredField("logoutHandler");
+        logoutHandlerField.setAccessible(true);
+        OidcLogoutHandler logoutHandler = (OidcLogoutHandler) logoutHandlerField.get(oidcAuthenticationHandler);
+        String result = logoutHandler.getIdTokenFromOak("testUser");
+
+        // Verify returns null when user not found
+        assertNull(result, "Should return null when user is not found");
+        verify(mockSession).logout();
+    }
+
+    @Test
+    void testGetIdTokenFromOak_UserIsGroup() throws Exception {
+        // Setup mocks
+        org.apache.sling.jcr.api.SlingRepository mockSlingRepo = mock(org.apache.sling.jcr.api.SlingRepository.class);
+        org.apache.jackrabbit.api.JackrabbitSession mockSession =
+                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
+        org.apache.jackrabbit.api.security.user.UserManager mockUserManager =
+                mock(org.apache.jackrabbit.api.security.user.UserManager.class);
+        org.apache.jackrabbit.api.security.user.Authorizable mockAuthorizable =
+                mock(org.apache.jackrabbit.api.security.user.Authorizable.class);
+
+        // Mock repository and session
+        when(mockSlingRepo.loginService("test-service-user", null)).thenReturn(mockSession);
+        when(mockSession.getUserManager()).thenReturn(mockUserManager);
+        when(mockUserManager.getAuthorizable("testUser")).thenReturn(mockAuthorizable);
+        when(mockAuthorizable.isGroup()).thenReturn(true);
+
+        // Setup configs
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("path", "/test");
+        configMap.put("enableSPInitiatedSingleLogout", true);
+        configMap.put("logoutRedirectAllowedHosts", new String[] {"localhost"});
+        configMap.put("logoutServiceUserName", "test-service-user");
+        config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
+
+        // Create handler
+        oidcAuthenticationHandler = new OidcAuthenticationHandler(
+                bundleContext,
+                connections,
+                config,
+                loginCookieManager,
+                userInfoProcessors,
+                cryptoService,
+                mockSlingRepo);
+
+        // Use reflection to call private method
+        // Access logoutHandler field via reflection
+        java.lang.reflect.Field logoutHandlerField = OidcAuthenticationHandler.class.getDeclaredField("logoutHandler");
+        logoutHandlerField.setAccessible(true);
+        OidcLogoutHandler logoutHandler = (OidcLogoutHandler) logoutHandlerField.get(oidcAuthenticationHandler);
+        String result = logoutHandler.getIdTokenFromOak("testUser");
+
+        // Verify returns null when authorizable is a group
+        assertNull(result, "Should return null when authorizable is a group");
+        verify(mockSession).logout();
+    }
+
+    @Test
+    void testGetIdTokenFromOak_IdTokenFoundInProfile() throws Exception {
+        // Setup mocks
+        org.apache.sling.jcr.api.SlingRepository mockSlingRepo = mock(org.apache.sling.jcr.api.SlingRepository.class);
+        org.apache.jackrabbit.api.JackrabbitSession mockSession =
+                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
+        org.apache.jackrabbit.api.security.user.UserManager mockUserManager =
+                mock(org.apache.jackrabbit.api.security.user.UserManager.class);
+        org.apache.jackrabbit.api.security.user.Authorizable mockAuthorizable =
+                mock(org.apache.jackrabbit.api.security.user.Authorizable.class);
+        javax.jcr.Value mockValue = mock(javax.jcr.Value.class);
+
+        // Mock repository and session
+        when(mockSlingRepo.loginService("test-service-user", null)).thenReturn(mockSession);
+        when(mockSession.getUserManager()).thenReturn(mockUserManager);
+        when(mockUserManager.getAuthorizable("testUser")).thenReturn(mockAuthorizable);
+        when(mockAuthorizable.isGroup()).thenReturn(false);
+        when(mockAuthorizable.hasProperty("profile/id_token")).thenReturn(true);
+        when(mockAuthorizable.getProperty("profile/id_token")).thenReturn(new javax.jcr.Value[] {mockValue});
+        // Store encrypted value (Base64 encoded by StubCryptoService)
+        String plainToken = "my-id-token";
+        String encryptedToken = cryptoService.encrypt(plainToken);
+        when(mockValue.getString()).thenReturn(encryptedToken);
+
+        // Setup configs
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("path", "/test");
+        configMap.put("enableSPInitiatedSingleLogout", true);
+        configMap.put("logoutRedirectAllowedHosts", new String[] {"localhost"});
+        configMap.put("logoutServiceUserName", "test-service-user");
+        config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
+
+        // Create handler
+        oidcAuthenticationHandler = new OidcAuthenticationHandler(
+                bundleContext,
+                connections,
+                config,
+                loginCookieManager,
+                userInfoProcessors,
+                cryptoService,
+                mockSlingRepo);
+
+        // Use reflection to call private method
+        // Access logoutHandler field via reflection
+        java.lang.reflect.Field logoutHandlerField = OidcAuthenticationHandler.class.getDeclaredField("logoutHandler");
+        logoutHandlerField.setAccessible(true);
+        OidcLogoutHandler logoutHandler = (OidcLogoutHandler) logoutHandlerField.get(oidcAuthenticationHandler);
+        String result = logoutHandler.getIdTokenFromOak("testUser");
+
+        // Verify returns decrypted token (original plaintext)
+        assertEquals(plainToken, result, "Should return decrypted id_token from profile");
+        verify(mockSession).logout();
+    }
+
+    @Test
+    void testGetIdTokenFromOak_IdTokenFoundDirectly() throws Exception {
+        // Setup mocks
+        org.apache.sling.jcr.api.SlingRepository mockSlingRepo = mock(org.apache.sling.jcr.api.SlingRepository.class);
+        org.apache.jackrabbit.api.JackrabbitSession mockSession =
+                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
+        org.apache.jackrabbit.api.security.user.UserManager mockUserManager =
+                mock(org.apache.jackrabbit.api.security.user.UserManager.class);
+        org.apache.jackrabbit.api.security.user.Authorizable mockAuthorizable =
+                mock(org.apache.jackrabbit.api.security.user.Authorizable.class);
+        javax.jcr.Value mockValue = mock(javax.jcr.Value.class);
+
+        // Mock repository and session
+        when(mockSlingRepo.loginService("test-service-user", null)).thenReturn(mockSession);
+        when(mockSession.getUserManager()).thenReturn(mockUserManager);
+        when(mockUserManager.getAuthorizable("testUser")).thenReturn(mockAuthorizable);
+        when(mockAuthorizable.isGroup()).thenReturn(false);
+        when(mockAuthorizable.hasProperty("profile/id_token")).thenReturn(false);
+        when(mockAuthorizable.hasProperty("id_token")).thenReturn(true);
+        when(mockAuthorizable.getProperty("id_token")).thenReturn(new javax.jcr.Value[] {mockValue});
+        // Store encrypted value (Base64 encoded by StubCryptoService)
+        String plainToken = "my-direct-id-token";
+        String encryptedToken = cryptoService.encrypt(plainToken);
+        when(mockValue.getString()).thenReturn(encryptedToken);
+
+        // Setup configs
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("path", "/test");
+        configMap.put("enableSPInitiatedSingleLogout", true);
+        configMap.put("logoutRedirectAllowedHosts", new String[] {"localhost"});
+        configMap.put("logoutServiceUserName", "test-service-user");
+        config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
+
+        // Create handler
+        oidcAuthenticationHandler = new OidcAuthenticationHandler(
+                bundleContext,
+                connections,
+                config,
+                loginCookieManager,
+                userInfoProcessors,
+                cryptoService,
+                mockSlingRepo);
+
+        // Use reflection to call private method
+        // Access logoutHandler field via reflection
+        java.lang.reflect.Field logoutHandlerField = OidcAuthenticationHandler.class.getDeclaredField("logoutHandler");
+        logoutHandlerField.setAccessible(true);
+        OidcLogoutHandler logoutHandler = (OidcLogoutHandler) logoutHandlerField.get(oidcAuthenticationHandler);
+        String result = logoutHandler.getIdTokenFromOak("testUser");
+
+        // Verify returns decrypted token (original plaintext)
+        assertEquals(plainToken, result, "Should return decrypted id_token directly from user");
+        verify(mockSession).logout();
+    }
+
+    @Test
+    void testGetIdTokenFromOak_DecryptionFails() throws Exception {
+        // Setup mocks
+        org.apache.sling.jcr.api.SlingRepository mockSlingRepo = mock(org.apache.sling.jcr.api.SlingRepository.class);
+        org.apache.jackrabbit.api.JackrabbitSession mockSession =
+                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
+        org.apache.jackrabbit.api.security.user.UserManager mockUserManager =
+                mock(org.apache.jackrabbit.api.security.user.UserManager.class);
+        org.apache.jackrabbit.api.security.user.Authorizable mockAuthorizable =
+                mock(org.apache.jackrabbit.api.security.user.Authorizable.class);
+        javax.jcr.Value mockValue = mock(javax.jcr.Value.class);
+        CryptoService mockCryptoService = mock(CryptoService.class);
+
+        // Mock repository and session
+        when(mockSlingRepo.loginService("test-service-user", null)).thenReturn(mockSession);
+        when(mockSession.getUserManager()).thenReturn(mockUserManager);
+        when(mockUserManager.getAuthorizable("testUser")).thenReturn(mockAuthorizable);
+        when(mockAuthorizable.isGroup()).thenReturn(false);
+        when(mockAuthorizable.hasProperty("profile/id_token")).thenReturn(true);
+        when(mockAuthorizable.getProperty("profile/id_token")).thenReturn(new javax.jcr.Value[] {mockValue});
+        when(mockValue.getString()).thenReturn("encrypted-token");
+        when(mockCryptoService.decrypt("encrypted-token")).thenThrow(new RuntimeException("Decryption failed"));
+
+        // Setup configs
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("path", "/test");
+        configMap.put("enableSPInitiatedSingleLogout", true);
+        configMap.put("logoutRedirectAllowedHosts", new String[] {"localhost"});
+        configMap.put("logoutServiceUserName", "test-service-user");
+        config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
+
+        // Create handler
+        oidcAuthenticationHandler = new OidcAuthenticationHandler(
+                bundleContext,
+                connections,
+                config,
+                loginCookieManager,
+                userInfoProcessors,
+                mockCryptoService,
+                mockSlingRepo);
+
+        // Use reflection to call private method
+        // Access logoutHandler field via reflection
+        java.lang.reflect.Field logoutHandlerField = OidcAuthenticationHandler.class.getDeclaredField("logoutHandler");
+        logoutHandlerField.setAccessible(true);
+        OidcLogoutHandler logoutHandler = (OidcLogoutHandler) logoutHandlerField.get(oidcAuthenticationHandler);
+        String result = logoutHandler.getIdTokenFromOak("testUser");
+
+        // Verify returns null when decryption fails
+        assertNull(result, "Should return null when decryption fails");
+        verify(mockSession).logout();
+    }
+
+    @Test
+    void testGetIdTokenFromOak_NoIdTokenFound() throws Exception {
+        // Setup mocks
+        org.apache.sling.jcr.api.SlingRepository mockSlingRepo = mock(org.apache.sling.jcr.api.SlingRepository.class);
+        org.apache.jackrabbit.api.JackrabbitSession mockSession =
+                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
+        org.apache.jackrabbit.api.security.user.UserManager mockUserManager =
+                mock(org.apache.jackrabbit.api.security.user.UserManager.class);
+        org.apache.jackrabbit.api.security.user.Authorizable mockAuthorizable =
+                mock(org.apache.jackrabbit.api.security.user.Authorizable.class);
+
+        // Mock repository and session
+        when(mockSlingRepo.loginService("test-service-user", null)).thenReturn(mockSession);
+        when(mockSession.getUserManager()).thenReturn(mockUserManager);
+        when(mockUserManager.getAuthorizable("testUser")).thenReturn(mockAuthorizable);
+        when(mockAuthorizable.isGroup()).thenReturn(false);
+        when(mockAuthorizable.hasProperty("profile/id_token")).thenReturn(false);
+        when(mockAuthorizable.hasProperty("id_token")).thenReturn(false);
+
+        // Setup configs
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("path", "/test");
+        configMap.put("enableSPInitiatedSingleLogout", true);
+        configMap.put("logoutRedirectAllowedHosts", new String[] {"localhost"});
+        configMap.put("logoutServiceUserName", "test-service-user");
+        config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
+
+        // Create handler
+        oidcAuthenticationHandler = new OidcAuthenticationHandler(
+                bundleContext,
+                connections,
+                config,
+                loginCookieManager,
+                userInfoProcessors,
+                cryptoService,
+                mockSlingRepo);
+
+        // Use reflection to call private method
+        // Access logoutHandler field via reflection
+        java.lang.reflect.Field logoutHandlerField = OidcAuthenticationHandler.class.getDeclaredField("logoutHandler");
+        logoutHandlerField.setAccessible(true);
+        OidcLogoutHandler logoutHandler = (OidcLogoutHandler) logoutHandlerField.get(oidcAuthenticationHandler);
+        String result = logoutHandler.getIdTokenFromOak("testUser");
+
+        // Verify returns null when no id_token found
+        assertNull(result, "Should return null when no id_token found");
+        verify(mockSession).logout();
+    }
+
+    @Test
+    void testGetIdTokenFromOak_RepositoryException() throws Exception {
+        // Setup mocks
+        org.apache.sling.jcr.api.SlingRepository mockSlingRepo = mock(org.apache.sling.jcr.api.SlingRepository.class);
+        org.apache.jackrabbit.api.JackrabbitSession mockSession =
+                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
+        org.apache.jackrabbit.api.security.user.UserManager mockUserManager =
+                mock(org.apache.jackrabbit.api.security.user.UserManager.class);
+
+        // Mock repository to throw exception
+        when(mockSlingRepo.loginService("test-service-user", null)).thenReturn(mockSession);
+        when(mockSession.getUserManager()).thenReturn(mockUserManager);
+        when(mockUserManager.getAuthorizable("testUser"))
+                .thenThrow(new javax.jcr.RepositoryException("Test repository error"));
+
+        // Setup configs
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("path", "/test");
+        configMap.put("enableSPInitiatedSingleLogout", true);
+        configMap.put("logoutRedirectAllowedHosts", new String[] {"localhost"});
+        configMap.put("logoutServiceUserName", "test-service-user");
+        config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
+
+        // Create handler
+        oidcAuthenticationHandler = new OidcAuthenticationHandler(
+                bundleContext,
+                connections,
+                config,
+                loginCookieManager,
+                userInfoProcessors,
+                cryptoService,
+                mockSlingRepo);
+
+        // Use reflection to call private method
+        // Access logoutHandler field via reflection
+        java.lang.reflect.Field logoutHandlerField = OidcAuthenticationHandler.class.getDeclaredField("logoutHandler");
+        logoutHandlerField.setAccessible(true);
+        OidcLogoutHandler logoutHandler = (OidcLogoutHandler) logoutHandlerField.get(oidcAuthenticationHandler);
+        String result = logoutHandler.getIdTokenFromOak("testUser");
+
+        // Verify returns null when RepositoryException occurs
+        assertNull(result, "Should return null when RepositoryException occurs");
+        verify(mockSession).logout();
+    }
+
+    @Test
+    void testGetIdTokenFromOak_EmptyToken() throws Exception {
+        // Setup mocks
+        org.apache.sling.jcr.api.SlingRepository mockSlingRepo = mock(org.apache.sling.jcr.api.SlingRepository.class);
+        org.apache.jackrabbit.api.JackrabbitSession mockSession =
+                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
+        org.apache.jackrabbit.api.security.user.UserManager mockUserManager =
+                mock(org.apache.jackrabbit.api.security.user.UserManager.class);
+        org.apache.jackrabbit.api.security.user.Authorizable mockAuthorizable =
+                mock(org.apache.jackrabbit.api.security.user.Authorizable.class);
+        javax.jcr.Value mockValue = mock(javax.jcr.Value.class);
+
+        // Mock repository and session with empty token
+        when(mockSlingRepo.loginService("test-service-user", null)).thenReturn(mockSession);
+        when(mockSession.getUserManager()).thenReturn(mockUserManager);
+        when(mockUserManager.getAuthorizable("testUser")).thenReturn(mockAuthorizable);
+        when(mockAuthorizable.isGroup()).thenReturn(false);
+        when(mockAuthorizable.hasProperty("profile/id_token")).thenReturn(true);
+        when(mockAuthorizable.getProperty("profile/id_token")).thenReturn(new javax.jcr.Value[] {mockValue});
+        when(mockValue.getString()).thenReturn("");
+
+        // Setup configs
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("path", "/test");
+        configMap.put("enableSPInitiatedSingleLogout", true);
+        configMap.put("logoutRedirectAllowedHosts", new String[] {"localhost"});
+        configMap.put("logoutServiceUserName", "test-service-user");
+        config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
+
+        // Create handler
+        oidcAuthenticationHandler = new OidcAuthenticationHandler(
+                bundleContext,
+                connections,
+                config,
+                loginCookieManager,
+                userInfoProcessors,
+                cryptoService,
+                mockSlingRepo);
+
+        // Use reflection to call private method
+        // Access logoutHandler field via reflection
+        java.lang.reflect.Field logoutHandlerField = OidcAuthenticationHandler.class.getDeclaredField("logoutHandler");
+        logoutHandlerField.setAccessible(true);
+        OidcLogoutHandler logoutHandler = (OidcLogoutHandler) logoutHandlerField.get(oidcAuthenticationHandler);
+        String result = logoutHandler.getIdTokenFromOak("testUser");
+
+        // Verify returns null when token is empty
+        assertNull(result, "Should return null when id_token is empty");
+        verify(mockSession).logout();
+    }
+
+    // ========== Tests for buildLogoutUrl method (54% coverage) ==========
+
+    @Test
+    void testBuildLogoutUrl_WithIdTokenHint() throws Exception {
+        URI endSessionEndpoint = new URI("https://idp.example.com/logout");
+        String postLogoutRedirectUri = "https://app.example.com/logged-out";
+        String idTokenHint = "test-id-token";
+
+        String result = OidcLogoutHandler.buildLogoutUrl(endSessionEndpoint, postLogoutRedirectUri, idTokenHint);
+
+        // Verify URL contains both id_token_hint and post_logout_redirect_uri
+        assertTrue(result.contains("id_token_hint="), "Should contain id_token_hint parameter");
+        assertTrue(result.contains("post_logout_redirect_uri="), "Should contain post_logout_redirect_uri parameter");
+        assertTrue(result.startsWith("https://idp.example.com/logout?"), "Should start with endpoint URL");
+    }
+
+    @Test
+    void testBuildLogoutUrl_WithoutIdTokenHint() throws Exception {
+        URI endSessionEndpoint = new URI("https://idp.example.com/logout");
+        String postLogoutRedirectUri = "https://app.example.com/logged-out";
+        String idTokenHint = null;
+
+        String result = OidcLogoutHandler.buildLogoutUrl(endSessionEndpoint, postLogoutRedirectUri, idTokenHint);
+
+        // Verify URL contains only post_logout_redirect_uri (no id_token_hint)
+        assertFalse(result.contains("id_token_hint="), "Should NOT contain id_token_hint parameter");
+        assertTrue(result.contains("post_logout_redirect_uri="), "Should contain post_logout_redirect_uri parameter");
+        assertTrue(result.startsWith("https://idp.example.com/logout?"), "Should start with endpoint URL");
+    }
+
+    @Test
+    void testBuildLogoutUrl_WithEmptyIdTokenHint() throws Exception {
+        URI endSessionEndpoint = new URI("https://idp.example.com/logout");
+        String postLogoutRedirectUri = "https://app.example.com/logged-out";
+        String idTokenHint = "";
+
+        String result = OidcLogoutHandler.buildLogoutUrl(endSessionEndpoint, postLogoutRedirectUri, idTokenHint);
+
+        // Verify URL contains only post_logout_redirect_uri (no id_token_hint)
+        assertFalse(result.contains("id_token_hint="), "Should NOT contain id_token_hint parameter");
+        assertTrue(result.contains("post_logout_redirect_uri="), "Should contain post_logout_redirect_uri parameter");
+    }
+
+    @Test
+    void testBuildLogoutUrl_UrlEncoding() throws Exception {
+        URI endSessionEndpoint = new URI("https://idp.example.com/logout");
+        String postLogoutRedirectUri = "https://app.example.com/logged-out?param=value with spaces&foo=bar";
+        String idTokenHint = "token with spaces";
+
+        String result = OidcLogoutHandler.buildLogoutUrl(endSessionEndpoint, postLogoutRedirectUri, idTokenHint);
+
+        // Verify URLs are properly encoded
+        assertTrue(result.contains("id_token_hint=token+with+spaces"), "Should URL-encode id_token_hint");
+        assertTrue(
+                result.contains("post_logout_redirect_uri=https%3A%2F%2Fapp.example.com"),
+                "Should URL-encode post_logout_redirect_uri");
     }
 }

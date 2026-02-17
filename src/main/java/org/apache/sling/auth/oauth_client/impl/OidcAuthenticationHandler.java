@@ -29,8 +29,10 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
@@ -69,6 +71,7 @@ import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.commons.crypto.CryptoService;
+import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
 import org.osgi.framework.BundleContext;
@@ -90,6 +93,15 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private static final Logger logger = LoggerFactory.getLogger(OidcAuthenticationHandler.class);
     private static final String AUTH_TYPE = "oidc";
+
+    /**
+     * Default service user name for reading id_token from OAK during logout. Can be overridden via OSGi configuration.
+     * This user must be configured in Apache Jackrabbit Oak External Principal Configuration (or equivalent)
+     * with read access to user profiles only. DO NOT grant write or admin permissions.
+     */
+    private static final String DEFAULT_OIDC_LOGOUT_SERVICE_NAME = "oidc-logout-service";
+
+    private final String logoutServiceUserName;
 
     private final Map<String, ClientConnection> connections;
 
@@ -113,7 +125,17 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private final int requestKeyCookieMaxAgeSeconds;
 
+    private final String logoutRedirectPath;
+
+    private final Set<String> logoutRedirectAllowedHosts;
+
+    private final boolean enableSPInitiatedSingleLogout;
+
     private final CryptoService cryptoService;
+
+    private final SlingRepository repository;
+
+    private final OidcLogoutHandler logoutHandler;
 
     @ObjectClassDefinition(
             name = "Apache Sling Oidc Authentication Handler",
@@ -158,6 +180,39 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                         + "callback. Default is 300 (5 minutes). Use a higher value if users often take longer "
                         + "(e.g. consent, 2FA).")
         int requestKeyCookieMaxAgeSeconds() default RedirectHelper.DEFAULT_REQUEST_KEY_COOKIE_MAX_AGE_SECONDS;
+
+        @AttributeDefinition(
+                name = "Enable SP-initiated single logout",
+                description = "Enable SP-initiated single logout to redirect to the IdP's end_session_endpoint "
+                        + "during logout. When enabled, users are redirected to the IdP for logout (if the IdP "
+                        + "supports it via an end_session_endpoint). When disabled, logout only clears local "
+                        + "session without notifying the IdP. SECURITY: When enabled, 'logoutRedirectAllowedHosts' "
+                        + "MUST be configured to prevent open redirect vulnerabilities. Default is false.")
+        boolean enableSPInitiatedSingleLogout() default false;
+
+        @AttributeDefinition(
+                name = "Logout redirect path",
+                description = "Path to redirect to after logout. Used as the post_logout_redirect_uri when "
+                        + "SP-initiated single logout is enabled, and as the local redirect path when it is "
+                        + "disabled or the IdP does not support single logout. Default is \"/\".")
+        String logoutRedirectPath() default "/";
+
+        @AttributeDefinition(
+                name = "Logout redirect allowed hosts",
+                description = "REQUIRED when 'enableSPInitiatedSingleLogout' is true. List of allowed host names "
+                        + "for the post_logout_redirect_uri sent to the IdP. The redirect URI is only sent if its "
+                        + "host is in this list; otherwise a URI with the first allowed host is used. This prevents "
+                        + "open redirect attacks when the request Host header is spoofed. When SP-initiated single "
+                        + "logout is enabled and this is empty, the service will fail to activate with an exception.",
+                cardinality = Integer.MAX_VALUE)
+        String[] logoutRedirectAllowedHosts() default {};
+
+        @AttributeDefinition(
+                name = "Logout service user name",
+                description = "Service user name for reading id_token from JCR during logout. This user must be "
+                        + "configured with minimal read-only access to user profile properties. Only used when "
+                        + "SP-initiated single logout is enabled.")
+        String logoutServiceUserName() default DEFAULT_OIDC_LOGOUT_SERVICE_NAME;
     }
 
     @Activate
@@ -167,7 +222,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             Config config,
             @Reference(policyOption = ReferencePolicyOption.GREEDY) LoginCookieManager loginCookieManager,
             @Reference(policyOption = ReferencePolicyOption.GREEDY) List<UserInfoProcessor> userInfoProcessors,
-            @Reference CryptoService cryptoService) {
+            @Reference CryptoService cryptoService,
+            @Reference(policyOption = ReferencePolicyOption.GREEDY) SlingRepository repository) {
 
         this.connections = connections.stream().collect(Collectors.toMap(ClientConnection::name, Function.identity()));
         this.idp = config.idp();
@@ -181,7 +237,36 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         this.path = config.path();
         this.resource = config.resource();
         this.requestKeyCookieMaxAgeSeconds = config.requestKeyCookieMaxAgeSeconds();
+        this.enableSPInitiatedSingleLogout = config.enableSPInitiatedSingleLogout();
+        this.logoutRedirectPath = config.logoutRedirectPath();
+        this.logoutRedirectAllowedHosts = config.logoutRedirectAllowedHosts() != null
+                ? Stream.of(config.logoutRedirectAllowedHosts())
+                        .filter(h -> h != null && !h.isEmpty())
+                        .map(String::toLowerCase)
+                        .collect(Collectors.toSet())
+                : Set.of();
+        this.logoutServiceUserName = config.logoutServiceUserName();
         this.cryptoService = cryptoService;
+        this.repository = repository;
+
+        // Initialize logout handler
+        this.logoutHandler = new OidcLogoutHandler(
+                repository,
+                cryptoService,
+                this.connections,
+                defaultConnectionName,
+                logoutServiceUserName,
+                logoutRedirectPath,
+                this.logoutRedirectAllowedHosts);
+
+        // Security validation: enforce allowed hosts when SP-initiated single logout is enabled
+        if (this.enableSPInitiatedSingleLogout && this.logoutRedirectAllowedHosts.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "SECURITY: SP-initiated single logout is enabled but 'logoutRedirectAllowedHosts' is not configured. "
+                            + "This would make logout vulnerable to open redirect attacks via Host header spoofing. "
+                            + "You must configure 'logoutRedirectAllowedHosts' with at least one allowed host when "
+                            + "'enableSPInitiatedSingleLogout' is true.");
+        }
 
         logger.debug("activate: registering ExternalIdentityProvider");
         bundleContext.registerService(
@@ -565,7 +650,57 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     @Override
     public void dropCredentials(HttpServletRequest request, HttpServletResponse response) {
-        // TODO: perform logout from Sling and redirect?
+        String userId = request.getRemoteUser();
+
+        // Clear login cookie
+        if (loginCookieManager != null) {
+            loginCookieManager.clearLoginCookie(request, response);
+        }
+
+        // Resolve the connection used for this user's session
+        ClientConnection connection = logoutHandler.resolveConnectionForLogout();
+
+        // Cleanup stored tokens from user profile using the specific UserInfoProcessor
+        if (userId != null && !userId.isEmpty() && connection != null) {
+            UserInfoProcessor processor = userInfoProcessors.get(connection.name());
+            logoutHandler.cleanupUserTokens(userId, processor);
+        }
+
+        // Only perform redirect to IdP if SP-initiated single logout is enabled
+        if (!enableSPInitiatedSingleLogout) {
+            logger.debug("SP-initiated single logout is disabled; logout completed without redirect");
+            return;
+        }
+
+        // SP-initiated single logout is enabled - proceed with redirect
+        if (response.isCommitted()) {
+            logger.debug("Response already committed (e.g. by another auth handler); skipping redirect");
+            return;
+        }
+
+        String idTokenHint = null;
+        if (userId != null && !userId.isEmpty()) {
+            idTokenHint = logoutHandler.getIdTokenFromOak(userId);
+        }
+
+        // Get redirect parameter from request (if provided)
+        String redirectParameter = request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT);
+
+        String redirectPath = logoutHandler.buildPostLogoutRedirectUri(request, redirectParameter);
+        URI endSessionEndpoint = logoutHandler.getEndSessionEndpoint(connection);
+
+        try {
+            if (endSessionEndpoint != null) {
+                String logoutUrl = OidcLogoutHandler.buildLogoutUrl(endSessionEndpoint, redirectPath, idTokenHint);
+                logger.debug("Redirecting to IdP end_session_endpoint for single logout: {}", logoutUrl);
+                response.sendRedirect(logoutUrl);
+            } else {
+                logger.debug("No end_session_endpoint configured; redirecting locally to {}", redirectPath);
+                response.sendRedirect(redirectPath);
+            }
+        } catch (IOException e) {
+            throw new OidcAuthenticationHandlerException("Error while redirecting during logout", e);
+        }
     }
 
     @Override

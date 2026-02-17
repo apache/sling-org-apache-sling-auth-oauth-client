@@ -139,6 +139,11 @@ public class SlingLoginCookieManager implements LoginCookieManager {
         return null;
     }
 
+    @Override
+    public void clearLoginCookie(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response) {
+        setCookie(request, response, cookieName, "", 0);
+    }
+
     private @Nullable AuthenticationInfo createAuthInfo(@NotNull final String authData) {
         final String userId = getUserId(authData);
         if (userId == null) {

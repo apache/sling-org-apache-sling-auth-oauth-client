@@ -25,11 +25,18 @@ public class OAuthTokens {
     private final @Nullable String accessToken;
     private final long expiresAt;
     private final @Nullable String refreshToken;
+    private final @Nullable String idToken;
 
     public OAuthTokens(@Nullable String accessToken, long expiresAt, @Nullable String refreshToken) {
+        this(accessToken, expiresAt, refreshToken, null);
+    }
+
+    public OAuthTokens(
+            @Nullable String accessToken, long expiresAt, @Nullable String refreshToken, @Nullable String idToken) {
         this.accessToken = accessToken;
         this.expiresAt = expiresAt;
         this.refreshToken = refreshToken;
+        this.idToken = idToken;
     }
 
     @Nullable
@@ -44,5 +51,10 @@ public class OAuthTokens {
     @Nullable
     public String refreshToken() {
         return refreshToken;
+    }
+
+    @Nullable
+    public String idToken() {
+        return idToken;
     }
 }

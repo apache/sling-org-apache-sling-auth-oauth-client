@@ -45,6 +45,7 @@ public interface OAuthTokenStore {
 
     String PROPERTY_NAME_ACCESS_TOKEN = "access_token";
     String PROPERTY_NAME_REFRESH_TOKEN = "refresh_token";
+    String PROPERTY_NAME_ID_TOKEN = "id_token";
 
     @NotNull
     OAuthToken getAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver)

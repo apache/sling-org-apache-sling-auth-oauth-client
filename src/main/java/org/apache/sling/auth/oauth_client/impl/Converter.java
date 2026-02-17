@@ -18,11 +18,14 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
+import com.nimbusds.jwt.JWT;
+import com.nimbusds.jwt.JWTParser;
 import com.nimbusds.oauth2.sdk.token.BearerAccessToken;
 import com.nimbusds.oauth2.sdk.token.RefreshToken;
 import com.nimbusds.oauth2.sdk.token.Tokens;
 import com.nimbusds.openid.connect.sdk.token.OIDCTokens;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class Converter {
 
@@ -65,8 +68,9 @@ public class Converter {
         String refreshToken = nimbusTokens.getRefreshToken() != null
                 ? nimbusTokens.getRefreshToken().getValue()
                 : null;
+        String idToken = nimbusTokens.getIDTokenString();
 
-        return new OAuthTokens(accessToken, expiresAt, refreshToken);
+        return new OAuthTokens(accessToken, expiresAt, refreshToken, idToken);
     }
 
     public static @NotNull OAuthTokens toSlingOAuthTokens(@NotNull Tokens oAuthTokens) {
@@ -79,8 +83,31 @@ public class Converter {
         String refreshToken = oAuthTokens.getRefreshToken() != null
                 ? oAuthTokens.getRefreshToken().getValue()
                 : null;
+        String idToken = (oAuthTokens instanceof OIDCTokens) ? ((OIDCTokens) oAuthTokens).getIDTokenString() : null;
 
-        return new OAuthTokens(accessToken, expiresAt, refreshToken);
+        return new OAuthTokens(accessToken, expiresAt, refreshToken, idToken);
+    }
+
+    /**
+     * Extracts a claim from an ID token string. Returns null if the ID token is null,
+     * cannot be parsed, or the claim is not present.
+     *
+     * @param idToken the serialized ID token (JWT string)
+     * @param claimName the name of the claim to extract
+     * @return the claim value, or null if not available
+     */
+    @Nullable
+    public static Object extractIdTokenClaim(@Nullable String idToken, @NotNull String claimName) {
+        if (idToken == null || idToken.isEmpty()) {
+            return null;
+        }
+
+        try {
+            JWT jwt = JWTParser.parse(idToken);
+            return jwt.getJWTClaimsSet().getClaim(claimName);
+        } catch (java.text.ParseException e) {
+            return null;
+        }
     }
 
     private Converter() {}

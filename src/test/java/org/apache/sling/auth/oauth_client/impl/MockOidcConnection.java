@@ -34,22 +34,7 @@ public class MockOidcConnection extends OidcConnectionImpl {
             String clientSecret,
             String baseUrl,
             String[] additionalAuthorizationParameters) {
-        super(
-                Converters.standardConverter()
-                        .convert(Map.ofEntries(
-                                Map.entry("name", name),
-                                Map.entry("baseUrl", baseUrl),
-                                Map.entry("authorizationEndpoint", ""),
-                                Map.entry("tokenEndpoint", ""),
-                                Map.entry("userInfoUrl", ""),
-                                Map.entry("jwkSetURL", ""),
-                                Map.entry("issuer", ""),
-                                Map.entry("clientId", clientId),
-                                Map.entry("clientSecret", clientSecret),
-                                Map.entry("scopes", scopes),
-                                Map.entry("additionalAuthorizationParameters", additionalAuthorizationParameters)))
-                        .to(Config.class),
-                null);
+        this(scopes, name, clientId, clientSecret, baseUrl, additionalAuthorizationParameters, null, null);
     }
 
     public MockOidcConnection(
@@ -60,9 +45,26 @@ public class MockOidcConnection extends OidcConnectionImpl {
             String baseUrl,
             String[] additionalAuthorizationParameters,
             OidcProviderMetadataRegistry metadataRegistry) {
+        this(scopes, name, clientId, clientSecret, baseUrl, additionalAuthorizationParameters, metadataRegistry, null);
+    }
+
+    /**
+     * Creates a mock connection with an optional end_session endpoint for logout tests.
+     *
+     * @param endSessionEndpointUrl full URL of the IdP end_session endpoint, or null for none
+     */
+    public MockOidcConnection(
+            String[] scopes,
+            String name,
+            String clientId,
+            String clientSecret,
+            String baseUrl,
+            String[] additionalAuthorizationParameters,
+            OidcProviderMetadataRegistry metadataRegistry,
+            String endSessionEndpointUrl) {
         super(
                 Converters.standardConverter()
-                        .convert(Map.ofEntries(
+                        .convert(Map.<String, Object>ofEntries(
                                 Map.entry("name", name),
                                 Map.entry("baseUrl", baseUrl),
                                 Map.entry("authorizationEndpoint", ""),
@@ -73,7 +75,10 @@ public class MockOidcConnection extends OidcConnectionImpl {
                                 Map.entry("clientId", clientId),
                                 Map.entry("clientSecret", clientSecret),
                                 Map.entry("scopes", scopes),
-                                Map.entry("additionalAuthorizationParameters", additionalAuthorizationParameters)))
+                                Map.entry("additionalAuthorizationParameters", additionalAuthorizationParameters),
+                                Map.entry(
+                                        "endSessionEndpoint",
+                                        endSessionEndpointUrl != null ? endSessionEndpointUrl : "")))
                         .to(Config.class),
                 metadataRegistry);
     }
