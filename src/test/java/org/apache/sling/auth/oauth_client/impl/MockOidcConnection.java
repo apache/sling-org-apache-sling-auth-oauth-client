@@ -34,7 +34,22 @@ public class MockOidcConnection extends OidcConnectionImpl {
             String clientSecret,
             String baseUrl,
             String[] additionalAuthorizationParameters) {
-        this(scopes, name, clientId, clientSecret, baseUrl, additionalAuthorizationParameters, null, null);
+        super(
+                Converters.standardConverter()
+                        .convert(Map.ofEntries(
+                                Map.entry("name", name),
+                                Map.entry("baseUrl", baseUrl),
+                                Map.entry("authorizationEndpoint", ""),
+                                Map.entry("tokenEndpoint", ""),
+                                Map.entry("userInfoUrl", ""),
+                                Map.entry("jwkSetURL", ""),
+                                Map.entry("issuer", ""),
+                                Map.entry("clientId", clientId),
+                                Map.entry("clientSecret", clientSecret),
+                                Map.entry("scopes", scopes),
+                                Map.entry("additionalAuthorizationParameters", additionalAuthorizationParameters)))
+                        .to(Config.class),
+                null);
     }
 
     public MockOidcConnection(

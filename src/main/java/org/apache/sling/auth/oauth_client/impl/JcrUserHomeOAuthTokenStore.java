@@ -28,7 +28,10 @@ import java.time.ZonedDateTime;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 
+import org.apache.jackrabbit.api.JackrabbitSession;
+import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.apache.jackrabbit.api.security.user.User;
+import org.apache.jackrabbit.api.security.user.UserManager;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.commons.crypto.CryptoService;
@@ -148,6 +151,65 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
 
             adaptToSession(resolver).save();
         } catch (RepositoryException e) {
+            throw new OAuthException(e);
+        }
+    }
+
+    @Override
+    public @Nullable String getIdToken(
+            @NotNull ClientConnection connection, @NotNull Session serviceSession, @NotNull String userId)
+            throws OAuthException {
+        try {
+            if (!(serviceSession instanceof JackrabbitSession)) {
+                logger.warn("Service session is not a JackrabbitSession; cannot retrieve id_token for user {}", userId);
+                return null;
+            }
+
+            UserManager userManager = ((JackrabbitSession) serviceSession).getUserManager();
+            Authorizable authorizable = userManager.getAuthorizable(userId);
+
+            if (authorizable == null || authorizable.isGroup()) {
+                logger.debug("User {} not found or is a group; cannot read id_token from Oak", userId);
+                return null;
+            }
+
+            // Try multiple property paths: oauth-tokens/{connection}/id_token (stored by persistTokens),
+            // then profile/id_token (common when sync stores on profile), then id_token (bare name)
+            for (String relPath : new String[] {
+                propertyPath(connection, PROPERTY_NAME_ID_TOKEN),
+                "profile/" + PROPERTY_NAME_ID_TOKEN,
+                PROPERTY_NAME_ID_TOKEN
+            }) {
+                if (authorizable.hasProperty(relPath)) {
+                    Value[] values = authorizable.getProperty(relPath);
+                    if (values != null && values.length > 0) {
+                        String encrypted = values[0].getString();
+                        if (encrypted != null && !encrypted.isEmpty()) {
+                            try {
+                                String decrypted = cryptoService.decrypt(encrypted);
+                                logger.debug("Successfully retrieved and decrypted id_token for user {}", userId);
+                                return decrypted;
+                            } catch (Exception e) {
+                                logger.error(
+                                        "Failed to decrypt id_token for user {}. IdP may not properly invalidate session. Error: {}",
+                                        userId,
+                                        e.getMessage(),
+                                        e);
+                                return null;
+                            }
+                        }
+                    }
+                }
+            }
+
+            logger.debug("No id_token found for user {} in Oak (storeIdToken and sync must persist it)", userId);
+            return null;
+        } catch (RepositoryException e) {
+            logger.error(
+                    "Repository error reading id_token for user {}. Verify service user has read access to user profiles. Error: {}",
+                    userId,
+                    e.getMessage(),
+                    e);
             throw new OAuthException(e);
         }
     }

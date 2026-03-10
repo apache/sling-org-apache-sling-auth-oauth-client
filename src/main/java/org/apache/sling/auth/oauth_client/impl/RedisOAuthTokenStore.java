@@ -18,6 +18,8 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
+import javax.jcr.Session;
+
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.jetbrains.annotations.NotNull;
@@ -118,6 +120,16 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
         try (Jedis jedis = pool.getResource()) {
             jedis.del(keyFor(userId, connection, KEY_SEGMENT_ACCESS_TOKEN));
         }
+    }
+
+    @Override
+    public @Nullable String getIdToken(
+            @NotNull ClientConnection connection, @NotNull Session serviceSession, @NotNull String userId)
+            throws OAuthException {
+        // Redis token store does not support ID token storage via service session.
+        // ID tokens are stored in JCR user profiles when using JcrUserHomeOAuthTokenStore.
+        // For Redis-based token storage, this method is not applicable and returns null.
+        return null;
     }
 
     private static void setWithExpiry(@NotNull Jedis jedis, @NotNull String key, @Nullable String value, long expiry) {

@@ -133,8 +133,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private final CryptoService cryptoService;
 
-    private final SlingRepository repository;
-
     private final OidcLogoutHandler logoutHandler;
 
     @ObjectClassDefinition(
@@ -223,7 +221,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             @Reference(policyOption = ReferencePolicyOption.GREEDY) LoginCookieManager loginCookieManager,
             @Reference(policyOption = ReferencePolicyOption.GREEDY) List<UserInfoProcessor> userInfoProcessors,
             @Reference CryptoService cryptoService,
-            @Reference(policyOption = ReferencePolicyOption.GREEDY) SlingRepository repository) {
+            @Reference(policyOption = ReferencePolicyOption.GREEDY) SlingRepository repository,
+            @Reference(policyOption = ReferencePolicyOption.GREEDY) OAuthTokenStore tokenStore) {
 
         this.connections = connections.stream().collect(Collectors.toMap(ClientConnection::name, Function.identity()));
         this.idp = config.idp();
@@ -247,12 +246,12 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 : Set.of();
         this.logoutServiceUserName = config.logoutServiceUserName();
         this.cryptoService = cryptoService;
-        this.repository = repository;
 
         // Initialize logout handler
         this.logoutHandler = new OidcLogoutHandler(
                 repository,
                 cryptoService,
+                tokenStore,
                 this.connections,
                 defaultConnectionName,
                 logoutServiceUserName,
@@ -650,20 +649,9 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     @Override
     public void dropCredentials(HttpServletRequest request, HttpServletResponse response) {
-        String userId = request.getRemoteUser();
-
         // Clear login cookie
         if (loginCookieManager != null) {
             loginCookieManager.clearLoginCookie(request, response);
-        }
-
-        // Resolve the connection used for this user's session
-        ClientConnection connection = logoutHandler.resolveConnectionForLogout();
-
-        // Cleanup stored tokens from user profile using the specific UserInfoProcessor
-        if (userId != null && !userId.isEmpty() && connection != null) {
-            UserInfoProcessor processor = userInfoProcessors.get(connection.name());
-            logoutHandler.cleanupUserTokens(userId, processor);
         }
 
         // Only perform redirect to IdP if SP-initiated single logout is enabled
@@ -671,6 +659,22 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             logger.debug("SP-initiated single logout is disabled; logout completed without redirect");
             return;
         }
+
+        // Resolve the connection used for this user's session
+        ClientConnection connection = logoutHandler.resolveConnectionForLogout();
+        if (connection == null) {
+            logger.error("enableSPInitiatedSingleLogout set to true but no OIDC connection is available.");
+            return;
+        }
+
+        // If endSessionEndpoint is not configured dropCredentials will not continue
+        URI endSessionEndpoint = logoutHandler.getEndSessionEndpoint(connection);
+        if (endSessionEndpoint == null) {
+            logger.error("enableSPInitiatedSingleLogout set to true but no end_session_endpoint configured.");
+            return;
+        }
+
+        String userId = request.getRemoteUser();
 
         // SP-initiated single logout is enabled - proceed with redirect
         if (response.isCommitted()) {
@@ -685,19 +689,12 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         // Get redirect parameter from request (if provided)
         String redirectParameter = request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT);
-
         String redirectPath = logoutHandler.buildPostLogoutRedirectUri(request, redirectParameter);
-        URI endSessionEndpoint = logoutHandler.getEndSessionEndpoint(connection);
 
         try {
-            if (endSessionEndpoint != null) {
-                String logoutUrl = OidcLogoutHandler.buildLogoutUrl(endSessionEndpoint, redirectPath, idTokenHint);
-                logger.debug("Redirecting to IdP end_session_endpoint for single logout: {}", logoutUrl);
-                response.sendRedirect(logoutUrl);
-            } else {
-                logger.debug("No end_session_endpoint configured; redirecting locally to {}", redirectPath);
-                response.sendRedirect(redirectPath);
-            }
+            String logoutUrl = OidcLogoutHandler.buildLogoutUrl(endSessionEndpoint, redirectPath, idTokenHint);
+            logger.debug("Redirecting to IdP end_session_endpoint for single logout: {}", logoutUrl);
+            response.sendRedirect(logoutUrl);
         } catch (IOException e) {
             throw new OidcAuthenticationHandlerException("Error while redirecting during logout", e);
         }

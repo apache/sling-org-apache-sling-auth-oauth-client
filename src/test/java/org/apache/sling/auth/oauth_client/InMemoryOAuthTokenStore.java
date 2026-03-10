@@ -18,6 +18,8 @@
  */
 package org.apache.sling.auth.oauth_client;
 
+import javax.jcr.Session;
+
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -30,6 +32,7 @@ import org.apache.sling.auth.oauth_client.impl.OAuthTokenStore;
 import org.apache.sling.auth.oauth_client.impl.OAuthTokens;
 import org.apache.sling.auth.oauth_client.impl.TokenState;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * In-memory, volatile token store implementation
@@ -148,6 +151,15 @@ public class InMemoryOAuthTokenStore implements OAuthTokenStore {
         } else if (value != null) {
             storage.remove(key);
         }
+    }
+
+    @Override
+    public @Nullable String getIdToken(
+            @NotNull ClientConnection connection, @NotNull Session serviceSession, @NotNull String userId)
+            throws OAuthException {
+        // InMemoryOAuthTokenStore does not support ID token retrieval via service session.
+        // This is only used for testing and ID tokens are not stored in this implementation.
+        return null;
     }
 
     public Stream<OAuthTokens> allTokens() {

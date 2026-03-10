@@ -23,7 +23,6 @@ import javax.jcr.Session;
 import javax.jcr.Value;
 import javax.servlet.http.HttpServletRequest;
 
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
@@ -35,7 +34,6 @@ import org.apache.jackrabbit.api.JackrabbitSession;
 import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.apache.jackrabbit.api.security.user.UserManager;
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.commons.crypto.CryptoService;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.jetbrains.annotations.NotNull;
@@ -44,7 +42,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Handles OIDC logout operations including IdP session termination and token cleanup.
+ * Handles OIDC logout operations including IdP session termination.
  * This class encapsulates the logic for SP-initiated single logout as defined by the
  * OIDC RP-Initiated Logout specification.
  */
@@ -55,6 +53,7 @@ class OidcLogoutHandler {
 
     private final SlingRepository repository;
     private final CryptoService cryptoService;
+    private final OAuthTokenStore tokenStore;
     private final Map<String, ClientConnection> connections;
     private final String defaultConnectionName;
     private final String logoutServiceUserName;
@@ -64,6 +63,7 @@ class OidcLogoutHandler {
     OidcLogoutHandler(
             @NotNull SlingRepository repository,
             @NotNull CryptoService cryptoService,
+            @Nullable OAuthTokenStore tokenStore,
             @NotNull Map<String, ClientConnection> connections,
             @NotNull String defaultConnectionName,
             @NotNull String logoutServiceUserName,
@@ -71,43 +71,12 @@ class OidcLogoutHandler {
             @NotNull Set<String> logoutRedirectAllowedHosts) {
         this.repository = repository;
         this.cryptoService = cryptoService;
+        this.tokenStore = tokenStore;
         this.connections = connections;
         this.defaultConnectionName = defaultConnectionName;
         this.logoutServiceUserName = logoutServiceUserName;
         this.logoutRedirectPath = logoutRedirectPath;
         this.logoutRedirectAllowedHosts = logoutRedirectAllowedHosts;
-    }
-
-    /**
-     * Cleans up stored tokens from the user's profile by invoking the provided UserInfoProcessor.
-     * This ensures that access tokens, refresh tokens, and ID tokens are removed from persistent
-     * storage during logout, preventing their reuse.
-     *
-     * @param userId the user identifier
-     * @param processor the UserInfoProcessor for the connection used for authentication
-     */
-    void cleanupUserTokens(@NotNull String userId, @Nullable UserInfoProcessor processor) {
-        if (processor == null) {
-            logger.debug("No UserInfoProcessor provided; skipping token cleanup for user {}", userId);
-            return;
-        }
-
-        try {
-            if (logger.isDebugEnabled()) {
-                logger.debug(
-                        "Invoking cleanupUserData on UserInfoProcessor '{}' for user {}",
-                        processor.connection(),
-                        userId);
-            }
-            processor.cleanupUserData(userId);
-        } catch (Exception e) {
-            logger.error(
-                    "Error cleaning up user data via UserInfoProcessor '{}' for user {}: {}",
-                    processor.connection(),
-                    userId,
-                    e.getMessage(),
-                    e);
-        }
     }
 
     /**
@@ -141,10 +110,7 @@ class OidcLogoutHandler {
         if (!redirectPath.startsWith("/")) {
             redirectPath = "/" + redirectPath;
         }
-        String contextPath = request.getContextPath();
-        if (contextPath != null && !contextPath.isEmpty()) {
-            redirectPath = contextPath + redirectPath;
-        }
+        // Note: Context path handling omitted - Sling always deploys at root context ("/")
         int port = request.getServerPort();
         String scheme = request.getScheme();
         String host = request.getServerName();
@@ -212,11 +178,7 @@ class OidcLogoutHandler {
             }
 
             // Build absolute URL from relative path
-            String contextPath = request.getContextPath();
-            if (contextPath != null && !contextPath.isEmpty() && !path.startsWith(contextPath)) {
-                path = contextPath + path;
-            }
-
+            // Note: Context path handling omitted - Sling always deploys at root context ("/")
             String scheme = request.getScheme();
             String host = request.getServerName();
             int port = request.getServerPort();
@@ -266,7 +228,7 @@ class OidcLogoutHandler {
      * @return the end session endpoint URI, or null if not available
      */
     @Nullable
-    URI getEndSessionEndpoint(ClientConnection connection) {
+    URI getEndSessionEndpoint(@NotNull ClientConnection connection) {
         if (connection instanceof OidcConnectionImpl) {
             return ((OidcConnectionImpl) connection).endSessionEndpoint();
         }
@@ -297,14 +259,25 @@ class OidcLogoutHandler {
                 return null;
             }
 
-            UserManager um = ((JackrabbitSession) serviceSession).getUserManager();
-            Authorizable authorizable = um.getAuthorizable(userId);
-            if (authorizable == null || authorizable.isGroup()) {
-                logger.debug("User {} not found or is a group; cannot read id_token from OAK", userId);
-                return null;
+            // Use tokenStore if available, otherwise fall back to legacy implementation
+            if (tokenStore != null) {
+                ClientConnection connection = resolveConnectionForLogout();
+                if (connection != null) {
+                    return tokenStore.getIdToken(connection, serviceSession, userId);
+                } else {
+                    logger.debug("No connection available for retrieving id_token for user {}", userId);
+                    return null;
+                }
+            } else {
+                // Legacy fallback when tokenStore is not available
+                UserManager um = ((JackrabbitSession) serviceSession).getUserManager();
+                Authorizable authorizable = um.getAuthorizable(userId);
+                if (authorizable == null || authorizable.isGroup()) {
+                    logger.debug("User {} not found or is a group; cannot read id_token from OAK", userId);
+                    return null;
+                }
+                return readAndDecryptIdToken(authorizable, userId);
             }
-            // Try profile first (common when sync stores attributes on user profile), then direct on user
-            return readAndDecryptIdToken(authorizable, userId);
         } catch (RepositoryException e) {
             logger.error(
                     "Repository error reading id_token for user {}. Verify service user '{}' has read access to user profiles. Error: {}",
@@ -383,20 +356,18 @@ class OidcLogoutHandler {
      * @return the complete logout URL
      */
     @NotNull
-    static String buildLogoutUrl(URI endSessionEndpoint, String postLogoutRedirectUri, String idTokenHint) {
-        try {
-            String encodedRedirect = URLEncoder.encode(postLogoutRedirectUri, StandardCharsets.UTF_8.name());
-            StringBuilder sb = new StringBuilder(endSessionEndpoint.toString()).append("?");
-            if (idTokenHint != null && !idTokenHint.isEmpty()) {
-                sb.append("id_token_hint=")
-                        .append(URLEncoder.encode(idTokenHint, StandardCharsets.UTF_8.name()))
-                        .append("&");
-            }
-            sb.append("post_logout_redirect_uri=").append(encodedRedirect);
-            return sb.toString();
-        } catch (UnsupportedEncodingException e) {
-            throw new OidcAuthenticationHandlerException(e);
+    static String buildLogoutUrl(
+            @NotNull URI endSessionEndpoint, @NotNull String postLogoutRedirectUri, @Nullable String idTokenHint) {
+        String encodedRedirect = URLEncoder.encode(postLogoutRedirectUri, StandardCharsets.UTF_8);
+        String endSessionStr = endSessionEndpoint.toString();
+        StringBuilder sb = new StringBuilder(endSessionStr).append(endSessionStr.contains("?") ? "&" : "?");
+        if (idTokenHint != null && !idTokenHint.isEmpty()) {
+            sb.append("id_token_hint=")
+                    .append(URLEncoder.encode(idTokenHint, StandardCharsets.UTF_8))
+                    .append("&");
         }
+        sb.append("post_logout_redirect_uri=").append(encodedRedirect);
+        return sb.toString();
     }
 
     /**
@@ -413,7 +384,8 @@ class OidcLogoutHandler {
          * @return the constructed URI string
          * @throws IllegalArgumentException if the URI is invalid
          */
-        static String buildRedirectUri(String scheme, String host, int port, String path) {
+        @NotNull
+        static String buildRedirectUri(@NotNull String scheme, @NotNull String host, int port, @Nullable String path) {
             if (scheme == null || scheme.isEmpty()) {
                 throw new IllegalArgumentException("Scheme cannot be null or empty");
             }
