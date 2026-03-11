@@ -85,7 +85,6 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
     }
 
     private static final Logger logger = LoggerFactory.getLogger(SlingUserInfoProcessorImpl.class);
-    private static final String PROFILE_PREFIX = "profile/";
 
     private final CryptoService cryptoService;
     private final boolean storeAccessToken;
@@ -139,7 +138,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
             // If groups are not in ID Token, add them from UserInfo
             userInfo.toJSONObject().forEach((key, value) -> {
                 if (value != null) {
-                    credentials.setAttribute(PROFILE_PREFIX + key, value.toString());
+                    credentials.setAttribute(OAuthTokenStore.PROFILE_PREFIX + key, value.toString());
                 }
             });
         }

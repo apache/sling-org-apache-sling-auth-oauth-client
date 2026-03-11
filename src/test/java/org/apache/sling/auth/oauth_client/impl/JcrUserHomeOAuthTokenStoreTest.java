@@ -110,7 +110,7 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
     // ========== Tests for getIdToken method ==========
 
     @Test
-    void getIdToken_sessionNotJackrabbitSession() throws RepositoryException {
+    void getIdToken_sessionNotJackrabbitSession() {
         Session plainSession = mock(Session.class);
 
         String result = tokenStore.getIdToken(connection, plainSession, TEST_USER_ID);
@@ -128,7 +128,7 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
     }
 
     @Test
-    void getIdToken_userIsGroup() throws RepositoryException {
+    void getIdToken_userIsGroup() {
         when(authorizable.isGroup()).thenReturn(true);
 
         String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
@@ -156,8 +156,10 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
         String encryptedToken = cryptoService.encrypt(plainToken);
         Value value = mock(Value.class);
         when(authorizable.hasProperty(connectionPath)).thenReturn(false);
-        when(authorizable.hasProperty("profile/id_token")).thenReturn(true);
-        when(authorizable.getProperty("profile/id_token")).thenReturn(new Value[] {value});
+        when(authorizable.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+                .thenReturn(true);
+        when(authorizable.getProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+                .thenReturn(new Value[] {value});
         when(value.getString()).thenReturn(encryptedToken);
 
         String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
@@ -171,7 +173,8 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
         String encryptedToken = cryptoService.encrypt(plainToken);
         Value value = mock(Value.class);
         when(authorizable.hasProperty(connectionPath)).thenReturn(false);
-        when(authorizable.hasProperty("profile/id_token")).thenReturn(false);
+        when(authorizable.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+                .thenReturn(false);
         when(authorizable.hasProperty("id_token")).thenReturn(true);
         when(authorizable.getProperty("id_token")).thenReturn(new Value[] {value});
         when(value.getString()).thenReturn(encryptedToken);
@@ -184,7 +187,8 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
     @Test
     void getIdToken_noTokenAtAnyPath() throws RepositoryException {
         when(authorizable.hasProperty(connectionPath)).thenReturn(false);
-        when(authorizable.hasProperty("profile/id_token")).thenReturn(false);
+        when(authorizable.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+                .thenReturn(false);
         when(authorizable.hasProperty("id_token")).thenReturn(false);
 
         String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
@@ -198,7 +202,8 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
         when(authorizable.hasProperty(connectionPath)).thenReturn(true);
         when(authorizable.getProperty(connectionPath)).thenReturn(new Value[0]);
         // Other paths not present
-        when(authorizable.hasProperty("profile/id_token")).thenReturn(false);
+        when(authorizable.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+                .thenReturn(false);
         when(authorizable.hasProperty("id_token")).thenReturn(false);
 
         String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
@@ -213,7 +218,8 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
         when(authorizable.getProperty(connectionPath)).thenReturn(new Value[] {value});
         when(value.getString()).thenReturn("");
         // Other paths not present
-        when(authorizable.hasProperty("profile/id_token")).thenReturn(false);
+        when(authorizable.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+                .thenReturn(false);
         when(authorizable.hasProperty("id_token")).thenReturn(false);
 
         String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);

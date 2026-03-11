@@ -49,7 +49,6 @@ import org.slf4j.LoggerFactory;
 class OidcLogoutHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(OidcLogoutHandler.class);
-    private static final String PROFILE_PREFIX = "profile/";
     private static final String ROOT_PATH = "/";
 
     private final SlingRepository repository;
@@ -306,7 +305,8 @@ class OidcLogoutHandler {
     @Nullable
     private String readAndDecryptIdToken(@NotNull Authorizable authorizable, @NotNull String userId) {
         for (String relPath : new String[] {
-            PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN, OAuthTokenStore.PROPERTY_NAME_ID_TOKEN
+            OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN,
+            OAuthTokenStore.PROPERTY_NAME_ID_TOKEN
         }) {
             try {
                 if (authorizable.hasProperty(relPath)) {

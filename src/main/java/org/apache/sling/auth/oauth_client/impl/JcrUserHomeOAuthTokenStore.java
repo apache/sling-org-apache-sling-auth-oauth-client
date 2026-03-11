@@ -180,7 +180,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
             // then profile/id_token (common when sync stores on profile), then id_token (bare name)
             for (String relPath : new String[] {
                 propertyPath(connection, PROPERTY_NAME_ID_TOKEN),
-                "profile/" + PROPERTY_NAME_ID_TOKEN,
+                PROFILE_PREFIX + PROPERTY_NAME_ID_TOKEN,
                 PROPERTY_NAME_ID_TOKEN
             }) {
                 String encrypted = readEncryptedProperty(authorizable, relPath);
