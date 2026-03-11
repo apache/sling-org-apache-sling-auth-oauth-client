@@ -23,11 +23,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.commons.crypto.CryptoService;
+import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.testing.mock.osgi.junit5.OsgiContext;
 import org.apache.sling.testing.mock.osgi.junit5.OsgiContextExtension;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +41,7 @@ import org.osgi.util.converter.Converters;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -588,5 +591,172 @@ class OidcLogoutHandlerTest {
         assertTrue(
                 result.contains("post_logout_redirect_uri=https%3A%2F%2Fapp.example.com"),
                 "Should URL-encode post_logout_redirect_uri");
+    }
+
+    // ========== Tests for resolveConnectionForLogout ==========
+
+    @Test
+    void testResolveConnectionForLogout_emptyConnections() {
+        OidcLogoutHandler handler = createLogoutHandler(new ArrayList<>(), "some-default", Set.of("localhost"));
+
+        assertNull(handler.resolveConnectionForLogout(), "Should return null when connections is empty");
+    }
+
+    @Test
+    void testResolveConnectionForLogout_defaultNameNotInMap() {
+        // defaultConnectionName set but no matching connection — should return first available
+        OidcLogoutHandler handler = createLogoutHandler(connections, "unknown-connection-name", Set.of("localhost"));
+
+        ClientConnection result = handler.resolveConnectionForLogout();
+        assertEquals(
+                MockOidcConnection.DEFAULT_CONNECTION, result, "Should return first connection when default not found");
+    }
+
+    @Test
+    void testResolveConnectionForLogout_emptyDefaultName() {
+        // Empty defaultConnectionName — should fall through to return first connection
+        OidcLogoutHandler handler = createLogoutHandler(connections, "", Set.of("localhost"));
+
+        ClientConnection result = handler.resolveConnectionForLogout();
+        assertEquals(
+                MockOidcConnection.DEFAULT_CONNECTION,
+                result,
+                "Should return first connection when default name is empty");
+    }
+
+    // ========== Tests for getEndSessionEndpoint ==========
+
+    @Test
+    void testGetEndSessionEndpoint_nonOidcConnection() {
+        OAuthConnectionImpl oauthConnection = mock(OAuthConnectionImpl.class);
+        OidcLogoutHandler handler = createLogoutHandler(connections, MOCK_OIDC_PARAM, Set.of("localhost"));
+
+        assertNull(handler.getEndSessionEndpoint(oauthConnection), "Should return null for non-OidcConnectionImpl");
+    }
+
+    @Test
+    void testGetEndSessionEndpoint_oidcConnectionWithEndpoint() throws Exception {
+        MockOidcConnection oidcConnection = new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "https://idp.example.com",
+                new String[0],
+                null,
+                "https://idp.example.com/logout");
+        List<ClientConnection> conns = new ArrayList<>();
+        conns.add(oidcConnection);
+        OidcLogoutHandler handler = createLogoutHandler(conns, MOCK_OIDC_PARAM, Set.of("localhost"));
+
+        URI result = handler.getEndSessionEndpoint(oidcConnection);
+        assertEquals(new URI("https://idp.example.com/logout"), result, "Should return end_session endpoint URI");
+    }
+
+    // ========== Tests for UriBuilder.buildRedirectUri ==========
+
+    @Test
+    void testUriBuilder_emptySchemeThrows() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> OidcLogoutHandler.UriBuilder.buildRedirectUri("", "localhost", 8080, "/path"),
+                "Should throw for empty scheme");
+    }
+
+    @Test
+    void testUriBuilder_emptyHostThrows() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> OidcLogoutHandler.UriBuilder.buildRedirectUri("http", "", 8080, "/path"),
+                "Should throw for empty host");
+    }
+
+    @Test
+    void testUriBuilder_nullPathDefaultsToRoot() {
+        String result = OidcLogoutHandler.UriBuilder.buildRedirectUri("http", "localhost", 8080, null);
+        assertTrue(result.endsWith("/"), "Should default null path to root /");
+    }
+
+    @Test
+    void testUriBuilder_defaultPortOmitted() {
+        String http = OidcLogoutHandler.UriBuilder.buildRedirectUri("http", "localhost", 80, "/path");
+        assertFalse(http.contains(":80"), "Default HTTP port should be omitted");
+
+        String https = OidcLogoutHandler.UriBuilder.buildRedirectUri("https", "example.com", 443, "/path");
+        assertFalse(https.contains(":443"), "Default HTTPS port should be omitted");
+    }
+
+    // ========== Tests for getIdTokenFromOak with tokenStore ==========
+
+    @Test
+    void testGetIdTokenFromOak_withTokenStore_returnsToken() throws Exception {
+        SlingRepository mockRepo = mock(SlingRepository.class);
+        org.apache.jackrabbit.api.JackrabbitSession mockSession =
+                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
+        when(mockRepo.loginService("test-service-user", null)).thenReturn(mockSession);
+
+        String plainToken = "stored-id-token";
+        OAuthTokenStore mockTokenStore = mock(OAuthTokenStore.class);
+        when(mockTokenStore.getIdToken(MockOidcConnection.DEFAULT_CONNECTION, mockSession, "testUser"))
+                .thenReturn(plainToken);
+
+        OidcLogoutHandler handler = new OidcLogoutHandler(
+                mockRepo,
+                cryptoService,
+                mockTokenStore,
+                Map.of(MOCK_OIDC_PARAM, MockOidcConnection.DEFAULT_CONNECTION),
+                MOCK_OIDC_PARAM,
+                "test-service-user",
+                "/",
+                Set.of("localhost"));
+
+        String result = handler.getIdTokenFromOak("testUser");
+
+        assertEquals(plainToken, result, "Should return token from tokenStore");
+        verify(mockSession).logout();
+    }
+
+    @Test
+    void testGetIdTokenFromOak_withTokenStore_noConnectionAvailable() throws Exception {
+        SlingRepository mockRepo = mock(SlingRepository.class);
+        org.apache.jackrabbit.api.JackrabbitSession mockSession =
+                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
+        when(mockRepo.loginService("test-service-user", null)).thenReturn(mockSession);
+
+        OAuthTokenStore mockTokenStore = mock(OAuthTokenStore.class);
+
+        OidcLogoutHandler handler = new OidcLogoutHandler(
+                mockRepo,
+                cryptoService,
+                mockTokenStore,
+                Map.of(), // no connections
+                "",
+                "test-service-user",
+                "/",
+                Set.of("localhost"));
+
+        String result = handler.getIdTokenFromOak("testUser");
+
+        assertNull(result, "Should return null when no connection is available");
+        verify(mockSession).logout();
+    }
+
+    // ========== Helper ==========
+
+    private OidcLogoutHandler createLogoutHandler(
+            List<ClientConnection> connectionList, String defaultName, Set<String> allowedHosts) {
+        Map<String, ClientConnection> connectionMap = new HashMap<>();
+        for (ClientConnection c : connectionList) {
+            connectionMap.put(c.name(), c);
+        }
+        return new OidcLogoutHandler(
+                mock(SlingRepository.class),
+                cryptoService,
+                null,
+                connectionMap,
+                defaultName,
+                "service-user",
+                "/",
+                allowedHosts);
     }
 }
