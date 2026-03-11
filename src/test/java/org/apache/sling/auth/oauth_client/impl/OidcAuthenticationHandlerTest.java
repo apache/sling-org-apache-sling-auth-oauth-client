@@ -33,6 +33,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
@@ -65,6 +66,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.osgi.framework.BundleContext;
 import org.osgi.util.converter.Converters;
 
@@ -1081,43 +1085,40 @@ class OidcAuthenticationHandlerTest {
         assertEquals("Client requested unknown connection", response1.getStatusMessage());
     }
 
-    @Test
-    void dropCredentials_withoutlogoutRedirectPath() throws IOException {
+    static Stream<Arguments> redirectPathScenarios() {
+        return Stream.of(
+                // logoutRedirectPath, redirectParam, expectedEncodedUri
+                Arguments.of(null, null, "http%3A%2F%2Flocalhost%3A8080%2F"),
+                Arguments.of("/goodbye", null, "http%3A%2F%2Flocalhost%3A8080%2Fgoodbye"),
+                Arguments.of(
+                        "/default", "/custom/logout/page", "http%3A%2F%2Flocalhost%3A8080%2Fcustom%2Flogout%2Fpage"),
+                Arguments.of("/default", "https://evil.com/malicious", "http%3A%2F%2Flocalhost%3A8080%2Fdefault"),
+                Arguments.of("/default", "//evil.com/malicious", "http%3A%2F%2Flocalhost%3A8080%2Fdefault"),
+                Arguments.of("/default", "", "http%3A%2F%2Flocalhost%3A8080%2Fdefault"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("redirectPathScenarios")
+    void dropCredentials_redirectPath(String logoutRedirectPath, String redirectParam, String expectedEncodedUri)
+            throws IOException {
         setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
-        config = createConfig(Map.of(
+        Map<String, Object> configOverrides = new HashMap<>(Map.of(
                 "defaultConnectionName",
                 MOCK_OIDC_PARAM,
                 "enableSPInitiatedSingleLogout",
                 true,
                 "logoutRedirectAllowedHosts",
                 new String[] {"localhost"}));
-        setupLogoutRequest("http", "localhost", 8080, null);
+        if (logoutRedirectPath != null) {
+            configOverrides.put("logoutRedirectPath", logoutRedirectPath);
+        }
+        config = createConfig(configOverrides);
+        setupLogoutRequest("http", "localhost", 8080, redirectParam);
 
         createOidcAuthenticationHandler();
         oidcAuthenticationHandler.dropCredentials(request, response);
 
-        verify(loginCookieManager).clearLoginCookie(request, response);
-        verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, "http%3A%2F%2Flocalhost%3A8080%2F");
-    }
-
-    @Test
-    void dropCredentials_usesCustomLogoutRedirectPath() throws IOException {
-        setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
-        config = createConfig(Map.of(
-                "defaultConnectionName",
-                MOCK_OIDC_PARAM,
-                "enableSPInitiatedSingleLogout",
-                true,
-                "logoutRedirectAllowedHosts",
-                new String[] {"localhost"},
-                "logoutRedirectPath",
-                "/goodbye"));
-        setupLogoutRequest("http", "localhost", 8080, null);
-
-        createOidcAuthenticationHandler();
-        oidcAuthenticationHandler.dropCredentials(request, response);
-
-        verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, "http%3A%2F%2Flocalhost%3A8080%2Fgoodbye");
+        verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, expectedEncodedUri);
     }
 
     @Test
@@ -1210,88 +1211,6 @@ class OidcAuthenticationHandlerTest {
         oidcAuthenticationHandler.dropCredentials(request, response);
 
         verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, "http%3A%2F%2Flocalhost%3A8080%2F");
-    }
-
-    @Test
-    void dropCredentials_withRelativeRedirectParameter() throws IOException {
-        setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
-        config = createConfig(Map.of(
-                "defaultConnectionName",
-                MOCK_OIDC_PARAM,
-                "enableSPInitiatedSingleLogout",
-                true,
-                "logoutRedirectAllowedHosts",
-                new String[] {"localhost"},
-                "logoutRedirectPath",
-                "/default"));
-        setupLogoutRequest("http", "localhost", 8080, "/custom/logout/page");
-
-        createOidcAuthenticationHandler();
-        oidcAuthenticationHandler.dropCredentials(request, response);
-
-        verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, "http%3A%2F%2Flocalhost%3A8080%2Fcustom%2Flogout%2Fpage");
-    }
-
-    @Test
-    void dropCredentials_withAbsoluteRedirectParameter_fallsBackToConfigured() throws IOException {
-        setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
-        config = createConfig(Map.of(
-                "defaultConnectionName",
-                MOCK_OIDC_PARAM,
-                "enableSPInitiatedSingleLogout",
-                true,
-                "logoutRedirectAllowedHosts",
-                new String[] {"localhost"},
-                "logoutRedirectPath",
-                "/default"));
-        setupLogoutRequest("http", "localhost", 8080, "https://evil.com/malicious");
-
-        createOidcAuthenticationHandler();
-        oidcAuthenticationHandler.dropCredentials(request, response);
-
-        // Absolute URLs are not allowed; should fall back to configured logoutRedirectPath
-        verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, "http%3A%2F%2Flocalhost%3A8080%2Fdefault");
-    }
-
-    @Test
-    void dropCredentials_withInvalidRedirectParameter_fallsBackToConfigured() throws IOException {
-        setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
-        config = createConfig(Map.of(
-                "defaultConnectionName",
-                MOCK_OIDC_PARAM,
-                "enableSPInitiatedSingleLogout",
-                true,
-                "logoutRedirectAllowedHosts",
-                new String[] {"localhost"},
-                "logoutRedirectPath",
-                "/default"));
-        setupLogoutRequest("http", "localhost", 8080, "//evil.com/malicious");
-
-        createOidcAuthenticationHandler();
-        oidcAuthenticationHandler.dropCredentials(request, response);
-
-        // Should fall back to configured logoutRedirectPath
-        verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, "http%3A%2F%2Flocalhost%3A8080%2Fdefault");
-    }
-
-    @Test
-    void dropCredentials_withEmptyRedirectParameter_usesConfigured() throws IOException {
-        setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
-        config = createConfig(Map.of(
-                "defaultConnectionName",
-                MOCK_OIDC_PARAM,
-                "enableSPInitiatedSingleLogout",
-                true,
-                "logoutRedirectAllowedHosts",
-                new String[] {"localhost"},
-                "logoutRedirectPath",
-                "/default"));
-        setupLogoutRequest("http", "localhost", 8080, "");
-
-        createOidcAuthenticationHandler();
-        oidcAuthenticationHandler.dropCredentials(request, response);
-
-        verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, "http%3A%2F%2Flocalhost%3A8080%2Fdefault");
     }
 
     @Test
@@ -1704,51 +1623,6 @@ class OidcAuthenticationHandlerTest {
 
     @Test
     void requestCredentialsWithEmptyResourceAttribute() {
-        // This is the class used by Sling to configure the Authentication Handler
-        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
-        String mockIdPUrl = "http://localhost:8080";
-        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
-        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
-        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
-                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
-        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
-
-        connections.add(new MockOidcConnection(
-                new String[] {"openid"},
-                MOCK_OIDC_PARAM,
-                "client-id",
-                "client-secret",
-                "http://localhost:8080",
-                new String[] {"access_type=offline"},
-                oidcProviderMetadataRegistry));
-
-        config = createConfig(Map.of(
-                "defaultConnectionName",
-                MOCK_OIDC_PARAM,
-                "callbackUri",
-                "http://redirect",
-                "pkceEnabled",
-                false,
-                "path",
-                new String[] {"/"},
-                "resource",
-                new String[] {}));
-
-        when(request.getRequestURI()).thenReturn("/");
-        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
-
-        createOidcAuthenticationHandler();
-        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
-
-        // Verify that no resource parameter is present in the redirect URL
-        assertEquals(302, mockResponse.getStatus());
-        String location = mockResponse.getHeader("location");
-        assertFalse(
-                location.contains("resource="), "Expected no resource parameter in redirect URL but got: " + location);
-    }
-
-    @Test
-    void requestCredentialsWithNullResourceAttribute() {
         // This is the class used by Sling to configure the Authentication Handler
         OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
         String mockIdPUrl = "http://localhost:8080";

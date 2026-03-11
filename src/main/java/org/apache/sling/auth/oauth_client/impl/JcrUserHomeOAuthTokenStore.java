@@ -159,9 +159,12 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
     public @Nullable String getIdToken(
             @NotNull ClientConnection connection, @NotNull Session serviceSession, @NotNull String userId)
             throws OAuthException {
+        // Sanitize userId for safe logging (prevents log injection)
+        String safeUserId = userId.replace('\n', '_').replace('\r', '_');
         try {
             if (!(serviceSession instanceof JackrabbitSession)) {
-                logger.warn("Service session is not a JackrabbitSession; cannot retrieve id_token for user {}", userId);
+                logger.warn(
+                        "Service session is not a JackrabbitSession; cannot retrieve id_token for user {}", safeUserId);
                 return null;
             }
 
@@ -169,7 +172,7 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
             Authorizable authorizable = userManager.getAuthorizable(userId);
 
             if (authorizable == null || authorizable.isGroup()) {
-                logger.debug("User {} not found or is a group; cannot read id_token from Oak", userId);
+                logger.debug("User {} not found or is a group; cannot read id_token from Oak", safeUserId);
                 return null;
             }
 
@@ -180,37 +183,43 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
                 "profile/" + PROPERTY_NAME_ID_TOKEN,
                 PROPERTY_NAME_ID_TOKEN
             }) {
-                if (authorizable.hasProperty(relPath)) {
-                    Value[] values = authorizable.getProperty(relPath);
-                    if (values != null && values.length > 0) {
-                        String encrypted = values[0].getString();
-                        if (encrypted != null && !encrypted.isEmpty()) {
-                            try {
-                                String decrypted = cryptoService.decrypt(encrypted);
-                                logger.debug("Successfully retrieved and decrypted id_token for user {}", userId);
-                                return decrypted;
-                            } catch (Exception e) {
-                                logger.error(
-                                        "Failed to decrypt id_token for user {}. IdP may not properly invalidate session. Error: {}",
-                                        userId,
-                                        e.getMessage(),
-                                        e);
-                                return null;
-                            }
-                        }
-                    }
+                String encrypted = readEncryptedProperty(authorizable, relPath);
+                if (encrypted != null) {
+                    return decryptIdToken(encrypted, safeUserId);
                 }
             }
 
-            logger.debug("No id_token found for user {} in Oak (storeIdToken and sync must persist it)", userId);
+            logger.debug("No id_token found for user {} in Oak (storeIdToken and sync must persist it)", safeUserId);
             return null;
         } catch (RepositoryException e) {
+            throw new OAuthException(
+                    "Repository error reading id_token for user '" + safeUserId
+                            + "'. Verify service user has read access to user profiles.",
+                    e);
+        }
+    }
+
+    private @Nullable String readEncryptedProperty(@NotNull Authorizable authorizable, @NotNull String relPath)
+            throws RepositoryException {
+        if (!authorizable.hasProperty(relPath)) return null;
+        Value[] values = authorizable.getProperty(relPath);
+        if (values == null || values.length == 0) return null;
+        String encrypted = values[0].getString();
+        return (encrypted != null && !encrypted.isEmpty()) ? encrypted : null;
+    }
+
+    private @Nullable String decryptIdToken(@NotNull String encrypted, @NotNull String safeUserId) {
+        try {
+            String decrypted = cryptoService.decrypt(encrypted);
+            logger.debug("Successfully retrieved and decrypted id_token for user {}", safeUserId);
+            return decrypted;
+        } catch (Exception e) {
             logger.error(
-                    "Repository error reading id_token for user {}. Verify service user has read access to user profiles. Error: {}",
-                    userId,
+                    "Failed to decrypt id_token for user {}. IdP may not properly invalidate session. Error: {}",
+                    safeUserId,
                     e.getMessage(),
                     e);
-            throw new OAuthException(e);
+            return null;
         }
     }
 

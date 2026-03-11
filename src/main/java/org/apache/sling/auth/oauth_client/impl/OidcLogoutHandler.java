@@ -50,6 +50,7 @@ class OidcLogoutHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(OidcLogoutHandler.class);
     private static final String PROFILE_PREFIX = "profile/";
+    private static final String ROOT_PATH = "/";
 
     private final SlingRepository repository;
     private final CryptoService cryptoService;
@@ -60,6 +61,7 @@ class OidcLogoutHandler {
     private final String logoutRedirectPath;
     private final Set<String> logoutRedirectAllowedHosts;
 
+    @SuppressWarnings("java:S107")
     OidcLogoutHandler(
             @NotNull SlingRepository repository,
             @NotNull CryptoService cryptoService,
@@ -105,10 +107,10 @@ class OidcLogoutHandler {
         // Use configured logoutRedirectPath
         String redirectPath = logoutRedirectPath;
         if (redirectPath == null || redirectPath.isEmpty()) {
-            redirectPath = "/";
+            redirectPath = ROOT_PATH;
         }
-        if (!redirectPath.startsWith("/")) {
-            redirectPath = "/" + redirectPath;
+        if (!redirectPath.startsWith(ROOT_PATH)) {
+            redirectPath = ROOT_PATH + redirectPath;
         }
         // Note: Context path handling omitted - Sling always deploys at root context ("/")
         int port = request.getServerPort();
@@ -374,6 +376,9 @@ class OidcLogoutHandler {
      * Helper class for building URIs.
      */
     static class UriBuilder {
+
+        private UriBuilder() {}
+
         /**
          * Builds a redirect URI string from components.
          *
@@ -386,14 +391,14 @@ class OidcLogoutHandler {
          */
         @NotNull
         static String buildRedirectUri(@NotNull String scheme, @NotNull String host, int port, @Nullable String path) {
-            if (scheme == null || scheme.isEmpty()) {
-                throw new IllegalArgumentException("Scheme cannot be null or empty");
+            if (scheme.isEmpty()) {
+                throw new IllegalArgumentException("Scheme cannot be empty");
             }
-            if (host == null || host.isEmpty()) {
-                throw new IllegalArgumentException("Host cannot be null or empty");
+            if (host.isEmpty()) {
+                throw new IllegalArgumentException("Host cannot be empty");
             }
             if (path == null) {
-                path = "/";
+                path = ROOT_PATH;
             }
 
             boolean defaultPort = (scheme.equals("http") && port == 80) || (scheme.equals("https") && port == 443);
