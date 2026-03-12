@@ -43,10 +43,7 @@ import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.osgi.service.component.annotations.ConfigurationPolicy.REQUIRE;
-
-// a config class is intentionally not defined, but a config is required to select an implementation
-@Component(configurationPolicy = REQUIRE)
+@Component(property = "service.ranking:Integer=0")
 public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
 
     private static final String PROPERTY_NAME_EXPIRES_AT = "expires_at";

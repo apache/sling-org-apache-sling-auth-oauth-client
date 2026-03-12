@@ -34,7 +34,7 @@ import redis.clients.jedis.JedisPool;
 
 import static org.osgi.service.component.annotations.ConfigurationPolicy.REQUIRE;
 
-@Component(configurationPolicy = REQUIRE)
+@Component(configurationPolicy = REQUIRE, property = "service.ranking:Integer=100")
 @Designate(ocd = RedisOAuthTokenStore.Config.class)
 public class RedisOAuthTokenStore implements OAuthTokenStore {
 
