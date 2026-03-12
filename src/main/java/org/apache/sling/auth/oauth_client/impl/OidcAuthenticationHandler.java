@@ -71,7 +71,6 @@ import org.apache.sling.auth.oauth_client.spi.LoginCookieManager;
 import org.apache.sling.auth.oauth_client.spi.OidcAuthCredentials;
 import org.apache.sling.auth.oauth_client.spi.UserInfoProcessor;
 import org.apache.sling.commons.crypto.CryptoService;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.api.JcrResourceConstants;
 import org.jetbrains.annotations.NotNull;
 import org.osgi.framework.BundleContext;
@@ -221,8 +220,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             @Reference(policyOption = ReferencePolicyOption.GREEDY) LoginCookieManager loginCookieManager,
             @Reference(policyOption = ReferencePolicyOption.GREEDY) List<UserInfoProcessor> userInfoProcessors,
             @Reference CryptoService cryptoService,
-            @Reference(policyOption = ReferencePolicyOption.GREEDY) SlingRepository repository,
-            @Reference(policyOption = ReferencePolicyOption.GREEDY) OAuthTokenStore tokenStore) {
+            @Reference OidcLogoutHandler logoutHandler) {
 
         this.connections = connections.stream().collect(Collectors.toMap(ClientConnection::name, Function.identity()));
         this.idp = config.idp();
@@ -246,17 +244,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 : Set.of();
         this.logoutServiceUserName = config.logoutServiceUserName();
         this.cryptoService = cryptoService;
-
-        // Initialize logout handler
-        this.logoutHandler = new OidcLogoutHandler(
-                repository,
-                cryptoService,
-                tokenStore,
-                this.connections,
-                defaultConnectionName,
-                logoutServiceUserName,
-                logoutRedirectPath,
-                this.logoutRedirectAllowedHosts);
+        this.logoutHandler = logoutHandler;
 
         // Security validation: enforce allowed hosts when SP-initiated single logout is enabled
         if (this.enableSPInitiatedSingleLogout && this.logoutRedirectAllowedHosts.isEmpty()) {
@@ -661,7 +649,8 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
         }
 
         // Resolve the connection used for this user's session
-        ClientConnection connection = logoutHandler.resolveConnectionForLogout();
+        ClientConnection connection =
+                OidcLogoutHandler.resolveConnectionForLogout(this.connections, this.defaultConnectionName);
         if (connection == null) {
             logger.error("enableSPInitiatedSingleLogout set to true but no OIDC connection is available.");
             return;
@@ -684,12 +673,13 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         String idTokenHint = null;
         if (userId != null && !userId.isEmpty()) {
-            idTokenHint = logoutHandler.getIdTokenFromOak(userId);
+            idTokenHint = logoutHandler.getIdTokenFromOak(userId, this.logoutServiceUserName, connection);
         }
 
         // Get redirect parameter from request (if provided)
         String redirectParameter = request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT);
-        String redirectPath = logoutHandler.buildPostLogoutRedirectUri(request, redirectParameter);
+        String redirectPath = logoutHandler.buildPostLogoutRedirectUri(
+                request, redirectParameter, this.logoutRedirectPath, this.logoutRedirectAllowedHosts);
 
         try {
             String logoutUrl = OidcLogoutHandler.buildLogoutUrl(endSessionEndpoint, redirectPath, idTokenHint);

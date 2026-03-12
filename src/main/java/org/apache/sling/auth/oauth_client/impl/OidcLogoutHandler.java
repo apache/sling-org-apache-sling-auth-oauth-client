@@ -20,7 +20,6 @@ package org.apache.sling.auth.oauth_client.impl;
 
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
-import javax.jcr.Value;
 import javax.servlet.http.HttpServletRequest;
 
 import java.net.URI;
@@ -30,14 +29,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.jackrabbit.api.JackrabbitSession;
-import org.apache.jackrabbit.api.security.user.Authorizable;
-import org.apache.jackrabbit.api.security.user.UserManager;
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.apache.sling.commons.crypto.CryptoService;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferencePolicyOption;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,38 +45,21 @@ import org.slf4j.LoggerFactory;
  * This class encapsulates the logic for SP-initiated single logout as defined by the
  * OIDC RP-Initiated Logout specification.
  */
-class OidcLogoutHandler {
+@Component(service = OidcLogoutHandler.class)
+public class OidcLogoutHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(OidcLogoutHandler.class);
     private static final String ROOT_PATH = "/";
 
     private final SlingRepository repository;
-    private final CryptoService cryptoService;
     private final OAuthTokenStore tokenStore;
-    private final Map<String, ClientConnection> connections;
-    private final String defaultConnectionName;
-    private final String logoutServiceUserName;
-    private final String logoutRedirectPath;
-    private final Set<String> logoutRedirectAllowedHosts;
 
-    @SuppressWarnings("java:S107")
-    OidcLogoutHandler(
-            @NotNull SlingRepository repository,
-            @NotNull CryptoService cryptoService,
-            @Nullable OAuthTokenStore tokenStore,
-            @NotNull Map<String, ClientConnection> connections,
-            @NotNull String defaultConnectionName,
-            @NotNull String logoutServiceUserName,
-            @NotNull String logoutRedirectPath,
-            @NotNull Set<String> logoutRedirectAllowedHosts) {
+    @Activate
+    public OidcLogoutHandler(
+            @Reference SlingRepository repository,
+            @Reference(policyOption = ReferencePolicyOption.GREEDY) OAuthTokenStore tokenStore) {
         this.repository = repository;
-        this.cryptoService = cryptoService;
         this.tokenStore = tokenStore;
-        this.connections = connections;
-        this.defaultConnectionName = defaultConnectionName;
-        this.logoutServiceUserName = logoutServiceUserName;
-        this.logoutRedirectPath = logoutRedirectPath;
-        this.logoutRedirectAllowedHosts = logoutRedirectAllowedHosts;
     }
 
     /**
@@ -90,10 +72,15 @@ class OidcLogoutHandler {
      * @return the post-logout redirect URI
      */
     @NotNull
-    String buildPostLogoutRedirectUri(HttpServletRequest request, @Nullable String redirectParameter) {
+    String buildPostLogoutRedirectUri(
+            HttpServletRequest request,
+            @Nullable String redirectParameter,
+            @NotNull String logoutRedirectPath,
+            @NotNull Set<String> logoutRedirectAllowedHosts) {
         // Try to use the redirect parameter if provided and valid
         if (redirectParameter != null && !redirectParameter.isEmpty()) {
-            String validatedRedirect = validateAndBuildRedirectFromParameter(redirectParameter, request);
+            String validatedRedirect =
+                    validateAndBuildRedirectFromParameter(redirectParameter, request, logoutRedirectAllowedHosts);
             if (validatedRedirect != null) {
                 return validatedRedirect;
             }
@@ -149,7 +136,9 @@ class OidcLogoutHandler {
      */
     @Nullable
     private String validateAndBuildRedirectFromParameter(
-            @NotNull String redirectParameter, @NotNull HttpServletRequest request) {
+            @NotNull String redirectParameter,
+            @NotNull HttpServletRequest request,
+            @NotNull Set<String> logoutRedirectAllowedHosts) {
         try {
             // Validate that it's a relative path, not an absolute URL
             // Must start with "/" but not "//" (which could be a protocol-relative URL)
@@ -209,15 +198,15 @@ class OidcLogoutHandler {
     /**
      * Resolves the client connection to use for logout operations.
      *
+     * @param connections map of available connections
+     * @param defaultConnectionName preferred connection name (may be empty)
      * @return the client connection, or null if none available
      */
     @Nullable
-    ClientConnection resolveConnectionForLogout() {
+    static ClientConnection resolveConnectionForLogout(
+            @NotNull Map<String, ClientConnection> connections, @Nullable String defaultConnectionName) {
         if (defaultConnectionName != null && !defaultConnectionName.isEmpty()) {
-            ClientConnection connection = connections.get(defaultConnectionName);
-            if (connection != null) {
-                return connection;
-            }
+            return connections.get(defaultConnectionName);
         }
         return connections.isEmpty() ? null : connections.values().iterator().next();
     }
@@ -246,10 +235,13 @@ class OidcLogoutHandler {
      * properties. DO NOT grant write or administrative permissions to this service user.
      *
      * @param userId the current user id (e.g. from request.getRemoteUser())
+     * @param logoutServiceUserName service user name for reading from JCR
+     * @param connection the resolved client connection to use with the token store
      * @return the id_token string, or null if not found or on error
      */
     @Nullable
-    String getIdTokenFromOak(@NotNull String userId) {
+    String getIdTokenFromOak(
+            @NotNull String userId, @NotNull String logoutServiceUserName, @Nullable ClientConnection connection) {
         Session serviceSession = null;
         try {
             serviceSession = repository.loginService(logoutServiceUserName, null);
@@ -260,24 +252,11 @@ class OidcLogoutHandler {
                 return null;
             }
 
-            // Use tokenStore if available, otherwise fall back to legacy implementation
-            if (tokenStore != null) {
-                ClientConnection connection = resolveConnectionForLogout();
-                if (connection != null) {
-                    return tokenStore.getIdToken(connection, serviceSession, userId);
-                } else {
-                    logger.debug("No connection available for retrieving id_token for user {}", userId);
-                    return null;
-                }
+            if (connection != null) {
+                return tokenStore.getIdToken(connection, serviceSession, userId);
             } else {
-                // Legacy fallback when tokenStore is not available
-                UserManager um = ((JackrabbitSession) serviceSession).getUserManager();
-                Authorizable authorizable = um.getAuthorizable(userId);
-                if (authorizable == null || authorizable.isGroup()) {
-                    logger.debug("User {} not found or is a group; cannot read id_token from OAK", userId);
-                    return null;
-                }
-                return readAndDecryptIdToken(authorizable, userId);
+                logger.debug("No connection available for retrieving id_token for user {}", userId);
+                return null;
             }
         } catch (RepositoryException e) {
             logger.error(
@@ -291,61 +270,6 @@ class OidcLogoutHandler {
             if (serviceSession != null) {
                 serviceSession.logout();
             }
-        }
-    }
-
-    /**
-     * Reads the id_token property from the authorizable and decrypts it.
-     * Tries both profile/id_token and id_token paths.
-     *
-     * @param authorizable the user authorizable
-     * @param userId the user id (for logging)
-     * @return the decrypted id_token, or null if not found or decryption fails
-     */
-    @Nullable
-    private String readAndDecryptIdToken(@NotNull Authorizable authorizable, @NotNull String userId) {
-        for (String relPath : new String[] {
-            OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN,
-            OAuthTokenStore.PROPERTY_NAME_ID_TOKEN
-        }) {
-            try {
-                if (authorizable.hasProperty(relPath)) {
-                    Value[] values = authorizable.getProperty(relPath);
-                    if (values != null && values.length > 0) {
-                        String encrypted = values[0].getString();
-                        if (encrypted != null && !encrypted.isEmpty()) {
-                            return decryptIdToken(encrypted, userId);
-                        }
-                    }
-                }
-            } catch (RepositoryException e) {
-                logger.warn("Error reading property {} for user {}: {}", relPath, userId, e.getMessage());
-            }
-        }
-        logger.debug("No id_token found on user {} in OAK (storeIdToken and sync must persist it)", userId);
-        return null;
-    }
-
-    /**
-     * Decrypts the encrypted id_token value.
-     *
-     * @param encrypted the encrypted id_token
-     * @param userId the user id (for logging)
-     * @return the decrypted id_token, or null if decryption fails
-     */
-    @Nullable
-    private String decryptIdToken(@NotNull String encrypted, @NotNull String userId) {
-        try {
-            String decrypted = cryptoService.decrypt(encrypted);
-            logger.debug("Successfully retrieved and decrypted id_token for user {}", userId);
-            return decrypted;
-        } catch (Exception e) {
-            logger.error(
-                    "Failed to decrypt id_token for user {}. IdP may not properly invalidate session. Error: {}",
-                    userId,
-                    e.getMessage(),
-                    e);
-            return null;
         }
     }
 

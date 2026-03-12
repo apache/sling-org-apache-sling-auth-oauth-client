@@ -98,7 +98,7 @@ class OidcAuthenticationHandlerTest {
     private HttpServletResponse response;
     private HttpServer tokenEndpointServer;
     private CryptoService cryptoService = new StubCryptoService();
-    private org.apache.sling.jcr.api.SlingRepository repository;
+    private OidcLogoutHandler logoutHandler;
     HttpServer idpServer;
 
     @BeforeEach
@@ -121,7 +121,7 @@ class OidcAuthenticationHandlerTest {
         config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
 
         loginCookieManager = mock(LoginCookieManager.class);
-        repository = mock(org.apache.sling.jcr.api.SlingRepository.class);
+        logoutHandler = new OidcLogoutHandler(mock(org.apache.sling.jcr.api.SlingRepository.class), null);
 
         SlingUserInfoProcessorImpl.Config userInfoConfig = Converters.standardConverter()
                 .convert(Map.of(
@@ -870,8 +870,7 @@ class OidcAuthenticationHandlerTest {
                 loginCookieManager,
                 userInfoProcessors,
                 cryptoService,
-                repository,
-                null);
+                logoutHandler);
     }
 
     private HttpServer createHttpServer() throws IOException {
