@@ -19,15 +19,12 @@
 package org.apache.sling.auth.oauth_client.impl;
 
 import javax.jcr.RepositoryException;
-import javax.jcr.Session;
 import javax.jcr.Value;
 
 import com.nimbusds.openid.connect.sdk.token.OIDCTokens;
-import org.apache.jackrabbit.api.JackrabbitSession;
-import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.apache.jackrabbit.api.security.user.User;
-import org.apache.jackrabbit.api.security.user.UserManager;
 import org.apache.sling.api.resource.Resource;
+import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.api.resource.ValueMap;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.commons.crypto.CryptoService;
@@ -49,23 +46,19 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
 
     private CryptoService cryptoService;
     private JcrUserHomeOAuthTokenStore tokenStore;
-    private JackrabbitSession session;
-    private UserManager userManager;
-    private Authorizable authorizable;
+    private User user;
+    private ResourceResolver mockResolver;
     private String connectionPath;
 
     @BeforeEach
-    void init() throws RepositoryException {
+    void init() {
         cryptoService = new StubCryptoService();
         tokenStore = createTokenStore();
         connectionPath = "oauth-tokens/" + connection.name() + "/id_token";
 
-        session = mock(JackrabbitSession.class);
-        userManager = mock(UserManager.class);
-        authorizable = mock(Authorizable.class);
-        when(session.getUserManager()).thenReturn(userManager);
-        when(userManager.getAuthorizable(TEST_USER_ID)).thenReturn(authorizable);
-        when(authorizable.isGroup()).thenReturn(false);
+        user = mock(User.class);
+        mockResolver = mock(ResourceResolver.class);
+        when(mockResolver.adaptTo(User.class)).thenReturn(user);
     }
 
     JcrUserHomeOAuthTokenStoreTest() {
@@ -110,42 +103,15 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
     // ========== Tests for getIdToken method ==========
 
     @Test
-    void getIdToken_sessionNotJackrabbitSession() {
-        Session plainSession = mock(Session.class);
-
-        String result = tokenStore.getIdToken(connection, plainSession, TEST_USER_ID);
-
-        assertNull(result, "Should return null for non-JackrabbitSession");
-    }
-
-    @Test
-    void getIdToken_userNotFound() throws RepositoryException {
-        when(userManager.getAuthorizable(TEST_USER_ID)).thenReturn(null);
-
-        String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
-
-        assertNull(result, "Should return null when user is not found");
-    }
-
-    @Test
-    void getIdToken_userIsGroup() {
-        when(authorizable.isGroup()).thenReturn(true);
-
-        String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
-
-        assertNull(result, "Should return null when authorizable is a group");
-    }
-
-    @Test
     void getIdToken_foundAtConnectionPath() throws RepositoryException {
         String plainToken = "my-id-token";
         String encryptedToken = cryptoService.encrypt(plainToken);
         Value value = mock(Value.class);
-        when(authorizable.hasProperty(connectionPath)).thenReturn(true);
-        when(authorizable.getProperty(connectionPath)).thenReturn(new Value[] {value});
+        when(user.hasProperty(connectionPath)).thenReturn(true);
+        when(user.getProperty(connectionPath)).thenReturn(new Value[] {value});
         when(value.getString()).thenReturn(encryptedToken);
 
-        String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
+        String result = tokenStore.getIdToken(connection, mockResolver);
 
         assertEquals(plainToken, result, "Should return decrypted id_token from connection path");
     }
@@ -155,14 +121,14 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
         String plainToken = "profile-id-token";
         String encryptedToken = cryptoService.encrypt(plainToken);
         Value value = mock(Value.class);
-        when(authorizable.hasProperty(connectionPath)).thenReturn(false);
-        when(authorizable.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+        when(user.hasProperty(connectionPath)).thenReturn(false);
+        when(user.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
                 .thenReturn(true);
-        when(authorizable.getProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+        when(user.getProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
                 .thenReturn(new Value[] {value});
         when(value.getString()).thenReturn(encryptedToken);
 
-        String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
+        String result = tokenStore.getIdToken(connection, mockResolver);
 
         assertEquals(plainToken, result, "Should return decrypted id_token from profile path");
     }
@@ -172,41 +138,39 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
         String plainToken = "bare-id-token";
         String encryptedToken = cryptoService.encrypt(plainToken);
         Value value = mock(Value.class);
-        when(authorizable.hasProperty(connectionPath)).thenReturn(false);
-        when(authorizable.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+        when(user.hasProperty(connectionPath)).thenReturn(false);
+        when(user.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
                 .thenReturn(false);
-        when(authorizable.hasProperty("id_token")).thenReturn(true);
-        when(authorizable.getProperty("id_token")).thenReturn(new Value[] {value});
+        when(user.hasProperty("id_token")).thenReturn(true);
+        when(user.getProperty("id_token")).thenReturn(new Value[] {value});
         when(value.getString()).thenReturn(encryptedToken);
 
-        String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
+        String result = tokenStore.getIdToken(connection, mockResolver);
 
         assertEquals(plainToken, result, "Should return decrypted id_token from bare path");
     }
 
     @Test
     void getIdToken_noTokenAtAnyPath() throws RepositoryException {
-        when(authorizable.hasProperty(connectionPath)).thenReturn(false);
-        when(authorizable.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+        when(user.hasProperty(connectionPath)).thenReturn(false);
+        when(user.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
                 .thenReturn(false);
-        when(authorizable.hasProperty("id_token")).thenReturn(false);
+        when(user.hasProperty("id_token")).thenReturn(false);
 
-        String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
+        String result = tokenStore.getIdToken(connection, mockResolver);
 
         assertNull(result, "Should return null when no id_token found at any path");
     }
 
     @Test
     void getIdToken_emptyValuesArray() throws RepositoryException {
-        // Connection path has property but with empty values array
-        when(authorizable.hasProperty(connectionPath)).thenReturn(true);
-        when(authorizable.getProperty(connectionPath)).thenReturn(new Value[0]);
-        // Other paths not present
-        when(authorizable.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+        when(user.hasProperty(connectionPath)).thenReturn(true);
+        when(user.getProperty(connectionPath)).thenReturn(new Value[0]);
+        when(user.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
                 .thenReturn(false);
-        when(authorizable.hasProperty("id_token")).thenReturn(false);
+        when(user.hasProperty("id_token")).thenReturn(false);
 
-        String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
+        String result = tokenStore.getIdToken(connection, mockResolver);
 
         assertNull(result, "Should return null when property values array is empty");
     }
@@ -214,15 +178,14 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
     @Test
     void getIdToken_emptyTokenValue() throws RepositoryException {
         Value value = mock(Value.class);
-        when(authorizable.hasProperty(connectionPath)).thenReturn(true);
-        when(authorizable.getProperty(connectionPath)).thenReturn(new Value[] {value});
+        when(user.hasProperty(connectionPath)).thenReturn(true);
+        when(user.getProperty(connectionPath)).thenReturn(new Value[] {value});
         when(value.getString()).thenReturn("");
-        // Other paths not present
-        when(authorizable.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
+        when(user.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
                 .thenReturn(false);
-        when(authorizable.hasProperty("id_token")).thenReturn(false);
+        when(user.hasProperty("id_token")).thenReturn(false);
 
-        String result = tokenStore.getIdToken(connection, session, TEST_USER_ID);
+        String result = tokenStore.getIdToken(connection, mockResolver);
 
         assertNull(result, "Should return null when token value is empty string");
     }
@@ -232,23 +195,23 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
         CryptoService failingCrypto = mock(CryptoService.class);
         when(failingCrypto.decrypt("bad-encrypted")).thenThrow(new RuntimeException("Decryption failed"));
         Value value = mock(Value.class);
-        when(authorizable.hasProperty(connectionPath)).thenReturn(true);
-        when(authorizable.getProperty(connectionPath)).thenReturn(new Value[] {value});
+        when(user.hasProperty(connectionPath)).thenReturn(true);
+        when(user.getProperty(connectionPath)).thenReturn(new Value[] {value});
         when(value.getString()).thenReturn("bad-encrypted");
 
         JcrUserHomeOAuthTokenStore failingTokenStore = new JcrUserHomeOAuthTokenStore(failingCrypto);
-        String result = failingTokenStore.getIdToken(connection, session, TEST_USER_ID);
+        String result = failingTokenStore.getIdToken(connection, mockResolver);
 
         assertNull(result, "Should return null when decryption fails");
     }
 
     @Test
     void getIdToken_repositoryException() throws RepositoryException {
-        when(userManager.getAuthorizable(TEST_USER_ID)).thenThrow(new RepositoryException("Test repository error"));
+        when(user.hasProperty(connectionPath)).thenThrow(new RepositoryException("Test repository error"));
 
         assertThrows(
                 OAuthException.class,
-                () -> tokenStore.getIdToken(connection, session, TEST_USER_ID),
+                () -> tokenStore.getIdToken(connection, mockResolver),
                 "Should throw OAuthException on RepositoryException");
     }
 }

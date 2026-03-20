@@ -28,10 +28,7 @@ import java.time.ZonedDateTime;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 
-import org.apache.jackrabbit.api.JackrabbitSession;
-import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.apache.jackrabbit.api.security.user.User;
-import org.apache.jackrabbit.api.security.user.UserManager;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.apache.sling.commons.crypto.CryptoService;
@@ -153,25 +150,10 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
     }
 
     @Override
-    public @Nullable String getIdToken(
-            @NotNull ClientConnection connection, @NotNull Session serviceSession, @NotNull String userId)
+    public @Nullable String getIdToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver)
             throws OAuthException {
-        // Sanitize userId for safe logging (prevents log injection)
-        String safeUserId = userId.replace('\n', '_').replace('\r', '_');
         try {
-            if (!(serviceSession instanceof JackrabbitSession)) {
-                logger.warn(
-                        "Service session is not a JackrabbitSession; cannot retrieve id_token for user {}", safeUserId);
-                return null;
-            }
-
-            UserManager userManager = ((JackrabbitSession) serviceSession).getUserManager();
-            Authorizable authorizable = userManager.getAuthorizable(userId);
-
-            if (authorizable == null || authorizable.isGroup()) {
-                logger.debug("User {} not found or is a group; cannot read id_token from Oak", safeUserId);
-                return null;
-            }
+            User user = adaptToUser(resolver);
 
             // Try multiple property paths: oauth-tokens/{connection}/id_token (stored by persistTokens),
             // then profile/id_token (common when sync stores on profile), then id_token (bare name)
@@ -180,26 +162,23 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
                 PROFILE_PREFIX + PROPERTY_NAME_ID_TOKEN,
                 PROPERTY_NAME_ID_TOKEN
             }) {
-                String encrypted = readEncryptedProperty(authorizable, relPath);
+                String encrypted = readEncryptedProperty(user, relPath);
                 if (encrypted != null) {
-                    return decryptIdToken(encrypted, safeUserId);
+                    return decryptIdToken(encrypted, resolver.getUserID());
                 }
             }
 
-            logger.debug("No id_token found for user {} in Oak (storeIdToken and sync must persist it)", safeUserId);
+            logger.debug("No id_token found for user {} in Oak", resolver.getUserID());
             return null;
         } catch (RepositoryException e) {
-            throw new OAuthException(
-                    "Repository error reading id_token for user '" + safeUserId
-                            + "'. Verify service user has read access to user profiles.",
-                    e);
+            throw new OAuthException("Repository error reading id_token", e);
         }
     }
 
-    private @Nullable String readEncryptedProperty(@NotNull Authorizable authorizable, @NotNull String relPath)
+    private @Nullable String readEncryptedProperty(@NotNull User user, @NotNull String relPath)
             throws RepositoryException {
-        if (!authorizable.hasProperty(relPath)) return null;
-        Value[] values = authorizable.getProperty(relPath);
+        if (!user.hasProperty(relPath)) return null;
+        Value[] values = user.getProperty(relPath);
         if (values == null || values.length == 0) return null;
         String encrypted = values[0].getString();
         return (encrypted != null && !encrypted.isEmpty()) ? encrypted : null;

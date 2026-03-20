@@ -24,8 +24,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -35,7 +35,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -45,7 +44,6 @@ import static org.mockito.Mockito.when;
 class OidcLogoutHandlerTest {
 
     private static final String MOCK_OIDC_PARAM = "mock-oidc-param";
-    private static final String SERVICE_USER = "test-service-user";
 
     private List<ClientConnection> connections;
     private Map<String, ClientConnection> connectionsMap;
@@ -61,64 +59,54 @@ class OidcLogoutHandlerTest {
     // ========== Tests for getIdTokenFromOak method ==========
 
     @Test
-    void testGetIdTokenFromOak_ServiceSessionNull() throws Exception {
-        SlingRepository mockRepo = mock(SlingRepository.class);
-        when(mockRepo.loginService(SERVICE_USER, null)).thenReturn(null);
-
-        OidcLogoutHandler handler = new OidcLogoutHandler(mockRepo, null);
-        String result = handler.getIdTokenFromOak("testUser", SERVICE_USER, MockOidcConnection.DEFAULT_CONNECTION);
-
-        assertNull(result, "Should return null when service session is null");
+    void testGetIdTokenFromOak_nullResolver() {
+        OidcLogoutHandler handler = new OidcLogoutHandler(mock(OAuthTokenStore.class));
+        assertNull(
+                handler.getIdTokenFromOak(null, MockOidcConnection.DEFAULT_CONNECTION),
+                "Should return null when resolver is null");
     }
 
     @Test
-    void testGetIdTokenFromOak_RepositoryException() throws Exception {
-        SlingRepository mockRepo = mock(SlingRepository.class);
-        when(mockRepo.loginService(SERVICE_USER, null))
-                .thenThrow(new javax.jcr.RepositoryException("Login service failed"));
-
-        OAuthTokenStore mockTokenStore = mock(OAuthTokenStore.class);
-        OidcLogoutHandler handler = new OidcLogoutHandler(mockRepo, mockTokenStore);
-        String result = handler.getIdTokenFromOak("testUser", SERVICE_USER, MockOidcConnection.DEFAULT_CONNECTION);
-
-        assertNull(result, "Should return null when RepositoryException occurs on loginService");
+    void testGetIdTokenFromOak_nullConnection() {
+        OidcLogoutHandler handler = new OidcLogoutHandler(mock(OAuthTokenStore.class));
+        assertNull(
+                handler.getIdTokenFromOak(mock(ResourceResolver.class), null),
+                "Should return null when connection is null");
     }
 
-    // ========== Tests for getIdTokenFromOak with tokenStore ==========
+    @Test
+    void testGetIdTokenFromOak_nullTokenStore() {
+        OidcLogoutHandler handler = new OidcLogoutHandler(null);
+        assertNull(
+                handler.getIdTokenFromOak(mock(ResourceResolver.class), MockOidcConnection.DEFAULT_CONNECTION),
+                "Should return null when tokenStore is null");
+    }
 
     @Test
-    void testGetIdTokenFromOak_withTokenStore_returnsToken() throws Exception {
-        SlingRepository mockRepo = mock(SlingRepository.class);
-        org.apache.jackrabbit.api.JackrabbitSession mockSession =
-                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
-        when(mockRepo.loginService(SERVICE_USER, null)).thenReturn(mockSession);
-
+    void testGetIdTokenFromOak_returnsToken() throws Exception {
         String plainToken = "stored-id-token";
+        ResourceResolver mockResolver = mock(ResourceResolver.class);
         OAuthTokenStore mockTokenStore = mock(OAuthTokenStore.class);
-        when(mockTokenStore.getIdToken(MockOidcConnection.DEFAULT_CONNECTION, mockSession, "testUser"))
+        when(mockTokenStore.getIdToken(MockOidcConnection.DEFAULT_CONNECTION, mockResolver))
                 .thenReturn(plainToken);
 
-        OidcLogoutHandler handler = new OidcLogoutHandler(mockRepo, mockTokenStore);
-        String result = handler.getIdTokenFromOak("testUser", SERVICE_USER, MockOidcConnection.DEFAULT_CONNECTION);
+        OidcLogoutHandler handler = new OidcLogoutHandler(mockTokenStore);
+        String result = handler.getIdTokenFromOak(mockResolver, MockOidcConnection.DEFAULT_CONNECTION);
 
         assertEquals(plainToken, result, "Should return token from tokenStore");
-        verify(mockSession).logout();
     }
 
     @Test
-    void testGetIdTokenFromOak_withTokenStore_noConnectionAvailable() throws Exception {
-        SlingRepository mockRepo = mock(SlingRepository.class);
-        org.apache.jackrabbit.api.JackrabbitSession mockSession =
-                mock(org.apache.jackrabbit.api.JackrabbitSession.class);
-        when(mockRepo.loginService(SERVICE_USER, null)).thenReturn(mockSession);
-
+    void testGetIdTokenFromOak_oauthException_returnsNull() throws Exception {
+        ResourceResolver mockResolver = mock(ResourceResolver.class);
         OAuthTokenStore mockTokenStore = mock(OAuthTokenStore.class);
+        when(mockTokenStore.getIdToken(MockOidcConnection.DEFAULT_CONNECTION, mockResolver))
+                .thenThrow(new OAuthException("revoked"));
 
-        OidcLogoutHandler handler = new OidcLogoutHandler(mockRepo, mockTokenStore);
-        String result = handler.getIdTokenFromOak("testUser", SERVICE_USER, null);
+        OidcLogoutHandler handler = new OidcLogoutHandler(mockTokenStore);
+        String result = handler.getIdTokenFromOak(mockResolver, MockOidcConnection.DEFAULT_CONNECTION);
 
-        assertNull(result, "Should return null when no connection is available");
-        verify(mockSession).logout();
+        assertNull(result, "Should return null on OAuthException");
     }
 
     // ========== Tests for buildLogoutUrl method ==========
@@ -205,7 +193,7 @@ class OidcLogoutHandlerTest {
     @Test
     void testGetEndSessionEndpoint_nonOidcConnection() {
         OAuthConnectionImpl oauthConnection = mock(OAuthConnectionImpl.class);
-        OidcLogoutHandler handler = new OidcLogoutHandler(mock(SlingRepository.class), null);
+        OidcLogoutHandler handler = new OidcLogoutHandler(null);
 
         assertNull(handler.getEndSessionEndpoint(oauthConnection), "Should return null for non-OidcConnectionImpl");
     }
@@ -221,7 +209,7 @@ class OidcLogoutHandlerTest {
                 new String[0],
                 null,
                 "https://idp.example.com/logout");
-        OidcLogoutHandler handler = new OidcLogoutHandler(mock(SlingRepository.class), null);
+        OidcLogoutHandler handler = new OidcLogoutHandler(null);
 
         URI result = handler.getEndSessionEndpoint(oidcConnection);
         assertEquals(new URI("https://idp.example.com/logout"), result, "Should return end_session endpoint URI");

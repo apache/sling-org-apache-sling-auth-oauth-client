@@ -121,7 +121,7 @@ class OidcAuthenticationHandlerTest {
         config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
 
         loginCookieManager = mock(LoginCookieManager.class);
-        logoutHandler = new OidcLogoutHandler(mock(org.apache.sling.jcr.api.SlingRepository.class), null);
+        logoutHandler = new OidcLogoutHandler(null);
 
         SlingUserInfoProcessorImpl.Config userInfoConfig = Converters.standardConverter()
                 .convert(Map.of(

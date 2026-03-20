@@ -18,8 +18,6 @@
  */
 package org.apache.sling.auth.oauth_client;
 
-import javax.jcr.Session;
-
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -154,11 +152,8 @@ public class InMemoryOAuthTokenStore implements OAuthTokenStore {
     }
 
     @Override
-    public @Nullable String getIdToken(
-            @NotNull ClientConnection connection, @NotNull Session serviceSession, @NotNull String userId)
+    public @Nullable String getIdToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver)
             throws OAuthException {
-        // InMemoryOAuthTokenStore does not support ID token retrieval via service session.
-        // This is only used for testing and ID tokens are not stored in this implementation.
         return null;
     }
 

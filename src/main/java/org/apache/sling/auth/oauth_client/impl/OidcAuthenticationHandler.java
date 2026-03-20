@@ -63,6 +63,8 @@ import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 import com.nimbusds.openid.connect.sdk.validators.IDTokenValidator;
 import org.apache.jackrabbit.oak.spi.security.authentication.credentials.CredentialsSupport;
 import org.apache.jackrabbit.oak.spi.security.authentication.external.ExternalIdentityProvider;
+import org.apache.sling.api.resource.ResourceResolver;
+import org.apache.sling.auth.core.AuthenticationSupport;
 import org.apache.sling.auth.core.spi.AuthenticationHandler;
 import org.apache.sling.auth.core.spi.AuthenticationInfo;
 import org.apache.sling.auth.core.spi.DefaultAuthenticationFeedbackHandler;
@@ -92,15 +94,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
     private static final Logger logger = LoggerFactory.getLogger(OidcAuthenticationHandler.class);
     private static final String AUTH_TYPE = "oidc";
-
-    /**
-     * Default service user name for reading id_token from OAK during logout. Can be overridden via OSGi configuration.
-     * This user must be configured in Apache Jackrabbit Oak External Principal Configuration (or equivalent)
-     * with read access to user profiles only. DO NOT grant write or admin permissions.
-     */
-    private static final String DEFAULT_OIDC_LOGOUT_SERVICE_NAME = "oidc-logout-service";
-
-    private final String logoutServiceUserName;
 
     private final Map<String, ClientConnection> connections;
 
@@ -203,13 +196,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                         + "logout is enabled and this is empty, the service will fail to activate with an exception.",
                 cardinality = Integer.MAX_VALUE)
         String[] logoutRedirectAllowedHosts() default {};
-
-        @AttributeDefinition(
-                name = "Logout service user name",
-                description = "Service user name for reading id_token from JCR during logout. This user must be "
-                        + "configured with minimal read-only access to user profile properties. Only used when "
-                        + "SP-initiated single logout is enabled.")
-        String logoutServiceUserName() default DEFAULT_OIDC_LOGOUT_SERVICE_NAME;
     }
 
     @Activate
@@ -242,7 +228,6 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                         .map(String::toLowerCase)
                         .collect(Collectors.toSet())
                 : Set.of();
-        this.logoutServiceUserName = config.logoutServiceUserName();
         this.cryptoService = cryptoService;
         this.logoutHandler = logoutHandler;
 
@@ -663,18 +648,15 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             return;
         }
 
-        String userId = request.getRemoteUser();
-
         // SP-initiated single logout is enabled - proceed with redirect
         if (response.isCommitted()) {
             logger.debug("Response already committed (e.g. by another auth handler); skipping redirect");
             return;
         }
 
-        String idTokenHint = null;
-        if (userId != null && !userId.isEmpty()) {
-            idTokenHint = logoutHandler.getIdTokenFromOak(userId, this.logoutServiceUserName, connection);
-        }
+        ResourceResolver resolver =
+                (ResourceResolver) request.getAttribute(AuthenticationSupport.REQUEST_ATTRIBUTE_RESOLVER);
+        String idTokenHint = logoutHandler.getIdTokenFromOak(resolver, connection);
 
         // Get redirect parameter from request (if provided)
         String redirectParameter = request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT);

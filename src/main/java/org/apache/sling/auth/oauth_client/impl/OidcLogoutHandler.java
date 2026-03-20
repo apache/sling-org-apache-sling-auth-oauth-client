@@ -18,8 +18,6 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
 import javax.servlet.http.HttpServletRequest;
 
 import java.net.URI;
@@ -29,13 +27,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
-import org.apache.sling.jcr.api.SlingRepository;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicyOption;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,14 +50,12 @@ public class OidcLogoutHandler {
     private static final Logger logger = LoggerFactory.getLogger(OidcLogoutHandler.class);
     private static final String ROOT_PATH = "/";
 
-    private final SlingRepository repository;
     private final OAuthTokenStore tokenStore;
 
     @Activate
     public OidcLogoutHandler(
-            @Reference SlingRepository repository,
-            @Reference(policyOption = ReferencePolicyOption.GREEDY) OAuthTokenStore tokenStore) {
-        this.repository = repository;
+            @Reference(cardinality = ReferenceCardinality.OPTIONAL, policyOption = ReferencePolicyOption.GREEDY)
+                    OAuthTokenStore tokenStore) {
         this.tokenStore = tokenStore;
     }
 
@@ -226,50 +223,22 @@ public class OidcLogoutHandler {
     }
 
     /**
-     * Reads the id_token from the user's OAK profile using a service account, for use as id_token_hint
-     * at the IdP end_session_endpoint. The token must have been stored previously (e.g. by
-     * SlingUserInfoProcessorImpl with storeIdToken and the sync layer persisting credentials to OAK).
-     * <p>
-     * The service user configured via logoutServiceUserName must be configured in Apache Jackrabbit Oak
-     * (e.g. system users / External Principal Configuration) with minimal read-only access to user profile
-     * properties. DO NOT grant write or administrative permissions to this service user.
+     * Reads the id_token for the current user, for use as id_token_hint at the IdP end_session_endpoint.
      *
-     * @param userId the current user id (e.g. from request.getRemoteUser())
-     * @param logoutServiceUserName service user name for reading from JCR
+     * @param resolver the resource resolver for the current user
      * @param connection the resolved client connection to use with the token store
      * @return the id_token string, or null if not found or on error
      */
     @Nullable
-    String getIdTokenFromOak(
-            @NotNull String userId, @NotNull String logoutServiceUserName, @Nullable ClientConnection connection) {
-        Session serviceSession = null;
-        try {
-            serviceSession = repository.loginService(logoutServiceUserName, null);
-            if (serviceSession == null) {
-                logger.warn(
-                        "Service session is null for user '{}'. Verify service user mapping is configured.",
-                        logoutServiceUserName);
-                return null;
-            }
-
-            if (connection != null) {
-                return tokenStore.getIdToken(connection, serviceSession, userId);
-            } else {
-                logger.debug("No connection available for retrieving id_token for user {}", userId);
-                return null;
-            }
-        } catch (RepositoryException e) {
-            logger.error(
-                    "Repository error reading id_token for user {}. Verify service user '{}' has read access to user profiles. Error: {}",
-                    userId,
-                    logoutServiceUserName,
-                    e.getMessage(),
-                    e);
+    String getIdTokenFromOak(@Nullable ResourceResolver resolver, @Nullable ClientConnection connection) {
+        if (tokenStore == null || resolver == null || connection == null) {
             return null;
-        } finally {
-            if (serviceSession != null) {
-                serviceSession.logout();
-            }
+        }
+        try {
+            return tokenStore.getIdToken(connection, resolver);
+        } catch (OAuthException e) {
+            logger.warn("Error reading id_token for user '{}': {}", resolver.getUserID(), e.getMessage(), e);
+            return null;
         }
     }
 
