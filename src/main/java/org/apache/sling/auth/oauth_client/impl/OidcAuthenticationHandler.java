@@ -656,7 +656,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
 
         ResourceResolver resolver =
                 (ResourceResolver) request.getAttribute(AuthenticationSupport.REQUEST_ATTRIBUTE_RESOLVER);
-        String idTokenHint = logoutHandler.getIdTokenFromOak(resolver, connection);
+        String idTokenHint = logoutHandler.getIdTokenFromTokenStore(resolver, connection);
 
         // Get redirect parameter from request (if provided)
         String redirectParameter = request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT);

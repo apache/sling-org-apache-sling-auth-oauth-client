@@ -32,7 +32,7 @@ import redis.clients.jedis.JedisPool;
 
 import static org.osgi.service.component.annotations.ConfigurationPolicy.REQUIRE;
 
-@Component(configurationPolicy = REQUIRE, property = "service.ranking:Integer=100")
+@Component(configurationPolicy = REQUIRE)
 @Designate(ocd = RedisOAuthTokenStore.Config.class)
 public class RedisOAuthTokenStore implements OAuthTokenStore {
 
@@ -46,6 +46,7 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
 
     private static final String KEY_SEGMENT_ACCESS_TOKEN = "access_token";
     private static final String KEY_SEGMENT_REFRESH_TOKEN = "refresh_token";
+    private static final String KEY_SEGMENT_ID_TOKEN = "id_token";
 
     private final JedisPool pool;
 
@@ -107,6 +108,7 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
                     tokens.expiresAt());
             if (tokens.refreshToken() != null)
                 jedis.set(keyFor(userId, connection, KEY_SEGMENT_REFRESH_TOKEN), tokens.refreshToken());
+            if (tokens.idToken() != null) jedis.set(keyFor(userId, connection, KEY_SEGMENT_ID_TOKEN), tokens.idToken());
         }
     }
 
@@ -123,7 +125,10 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
     @Override
     public @Nullable String getIdToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver)
             throws OAuthException {
-        return null;
+        String userId = resolver.getUserID();
+        try (Jedis jedis = pool.getResource()) {
+            return jedis.get(keyFor(userId, connection, KEY_SEGMENT_ID_TOKEN));
+        }
     }
 
     private static void setWithExpiry(@NotNull Jedis jedis, @NotNull String key, @Nullable String value, long expiry) {

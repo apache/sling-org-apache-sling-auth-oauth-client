@@ -1149,6 +1149,10 @@ class OidcAuthenticationHandlerTest {
         verify(response, never()).sendRedirect(anyString());
     }
 
+    // Distinct from dropCredentials_redirectPath: here the spoofing is in the HTTP Host header
+    // (request server name is evil.com, not in allowed hosts), so the redirect host must be
+    // replaced with one from logoutRedirectAllowedHosts. dropCredentials_redirectPath only tests
+    // a malicious redirect *parameter* while the request host is already trusted.
     @Test
     void dropCredentials_allowedHostsReplacesSpoofedHost() throws IOException {
         setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
@@ -1175,6 +1179,9 @@ class OidcAuthenticationHandlerTest {
         assertFalse(redirectUrl.contains("evil.com"), "Must not use spoofed host");
     }
 
+    // Happy path for host validation: request host (localhost) is in logoutRedirectAllowedHosts,
+    // so the redirect preserves it as-is. Complements dropCredentials_allowedHostsReplacesSpoofedHost
+    // which covers the case where the request host is not trusted and must be replaced.
     @Test
     void dropCredentials_allowedHostsAllowsConfiguredHost() throws IOException {
         setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);

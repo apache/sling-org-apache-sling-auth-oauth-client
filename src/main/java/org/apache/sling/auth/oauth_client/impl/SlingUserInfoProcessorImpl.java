@@ -195,6 +195,9 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
             logger.debug("ID token is null or empty; cannot store for logout");
         }
 
+        // The returned credentials are passed to Oak's LoginModule, which delegates to a registered
+        // SynchronizationHandler (e.g. DefaultSyncHandler) to create or update the JCR user and
+        // synchronize group memberships based on the attributes and groups set above.
         return credentials;
     }
 

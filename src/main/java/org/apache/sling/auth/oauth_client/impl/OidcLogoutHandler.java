@@ -89,7 +89,7 @@ public class OidcLogoutHandler {
 
         // Use configured logoutRedirectPath
         String redirectPath = logoutRedirectPath;
-        if (redirectPath == null || redirectPath.isEmpty()) {
+        if (redirectPath.isEmpty()) {
             redirectPath = ROOT_PATH;
         }
         if (!redirectPath.startsWith(ROOT_PATH)) {
@@ -230,7 +230,7 @@ public class OidcLogoutHandler {
      * @return the id_token string, or null if not found or on error
      */
     @Nullable
-    String getIdTokenFromOak(@Nullable ResourceResolver resolver, @Nullable ClientConnection connection) {
+    String getIdTokenFromTokenStore(@Nullable ResourceResolver resolver, @Nullable ClientConnection connection) {
         if (tokenStore == null || resolver == null || connection == null) {
             return null;
         }

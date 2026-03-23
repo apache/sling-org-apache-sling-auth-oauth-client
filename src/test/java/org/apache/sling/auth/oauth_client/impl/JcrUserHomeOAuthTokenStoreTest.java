@@ -42,8 +42,6 @@ import static org.mockito.Mockito.when;
 
 class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOAuthTokenStore> {
 
-    private static final String TEST_USER_ID = "testUser";
-
     private CryptoService cryptoService;
     private JcrUserHomeOAuthTokenStore tokenStore;
     private User user;
@@ -59,6 +57,18 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
         user = mock(User.class);
         mockResolver = mock(ResourceResolver.class);
         when(mockResolver.adaptTo(User.class)).thenReturn(user);
+    }
+
+    private Value encryptedValue(String plainToken) throws RepositoryException {
+        Value value = mock(Value.class);
+        when(value.getString()).thenReturn(cryptoService.encrypt(plainToken));
+        return value;
+    }
+
+    private void givenTokenAt(String path, String plainToken) throws RepositoryException {
+        Value value = encryptedValue(plainToken); // must be computed before entering outer when()
+        when(user.hasProperty(path)).thenReturn(true);
+        when(user.getProperty(path)).thenReturn(new Value[] {value});
     }
 
     JcrUserHomeOAuthTokenStoreTest() {
@@ -104,114 +114,55 @@ class JcrUserHomeOAuthTokenStoreTest extends TokenStoreTestSupport<JcrUserHomeOA
 
     @Test
     void getIdToken_foundAtConnectionPath() throws RepositoryException {
-        String plainToken = "my-id-token";
-        String encryptedToken = cryptoService.encrypt(plainToken);
-        Value value = mock(Value.class);
-        when(user.hasProperty(connectionPath)).thenReturn(true);
-        when(user.getProperty(connectionPath)).thenReturn(new Value[] {value});
-        when(value.getString()).thenReturn(encryptedToken);
-
-        String result = tokenStore.getIdToken(connection, mockResolver);
-
-        assertEquals(plainToken, result, "Should return decrypted id_token from connection path");
+        givenTokenAt(connectionPath, "my-id-token");
+        assertEquals("my-id-token", tokenStore.getIdToken(connection, mockResolver));
     }
 
     @Test
     void getIdToken_foundAtProfilePath() throws RepositoryException {
-        String plainToken = "profile-id-token";
-        String encryptedToken = cryptoService.encrypt(plainToken);
-        Value value = mock(Value.class);
-        when(user.hasProperty(connectionPath)).thenReturn(false);
-        when(user.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
-                .thenReturn(true);
-        when(user.getProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
-                .thenReturn(new Value[] {value});
-        when(value.getString()).thenReturn(encryptedToken);
-
-        String result = tokenStore.getIdToken(connection, mockResolver);
-
-        assertEquals(plainToken, result, "Should return decrypted id_token from profile path");
+        givenTokenAt(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN, "profile-id-token");
+        assertEquals("profile-id-token", tokenStore.getIdToken(connection, mockResolver));
     }
 
     @Test
     void getIdToken_foundAtBarePath() throws RepositoryException {
-        String plainToken = "bare-id-token";
-        String encryptedToken = cryptoService.encrypt(plainToken);
-        Value value = mock(Value.class);
-        when(user.hasProperty(connectionPath)).thenReturn(false);
-        when(user.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
-                .thenReturn(false);
-        when(user.hasProperty("id_token")).thenReturn(true);
-        when(user.getProperty("id_token")).thenReturn(new Value[] {value});
-        when(value.getString()).thenReturn(encryptedToken);
-
-        String result = tokenStore.getIdToken(connection, mockResolver);
-
-        assertEquals(plainToken, result, "Should return decrypted id_token from bare path");
+        givenTokenAt("id_token", "bare-id-token");
+        assertEquals("bare-id-token", tokenStore.getIdToken(connection, mockResolver));
     }
 
     @Test
-    void getIdToken_noTokenAtAnyPath() throws RepositoryException {
-        when(user.hasProperty(connectionPath)).thenReturn(false);
-        when(user.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
-                .thenReturn(false);
-        when(user.hasProperty("id_token")).thenReturn(false);
-
-        String result = tokenStore.getIdToken(connection, mockResolver);
-
-        assertNull(result, "Should return null when no id_token found at any path");
+    void getIdToken_noTokenAtAnyPath() {
+        assertNull(tokenStore.getIdToken(connection, mockResolver));
     }
 
     @Test
-    void getIdToken_emptyValuesArray() throws RepositoryException {
+    void getIdToken_emptyOrMissingValue() throws RepositoryException {
+        // empty array
         when(user.hasProperty(connectionPath)).thenReturn(true);
         when(user.getProperty(connectionPath)).thenReturn(new Value[0]);
-        when(user.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
-                .thenReturn(false);
-        when(user.hasProperty("id_token")).thenReturn(false);
+        assertNull(tokenStore.getIdToken(connection, mockResolver));
 
-        String result = tokenStore.getIdToken(connection, mockResolver);
-
-        assertNull(result, "Should return null when property values array is empty");
-    }
-
-    @Test
-    void getIdToken_emptyTokenValue() throws RepositoryException {
-        Value value = mock(Value.class);
-        when(user.hasProperty(connectionPath)).thenReturn(true);
-        when(user.getProperty(connectionPath)).thenReturn(new Value[] {value});
-        when(value.getString()).thenReturn("");
-        when(user.hasProperty(OAuthTokenStore.PROFILE_PREFIX + OAuthTokenStore.PROPERTY_NAME_ID_TOKEN))
-                .thenReturn(false);
-        when(user.hasProperty("id_token")).thenReturn(false);
-
-        String result = tokenStore.getIdToken(connection, mockResolver);
-
-        assertNull(result, "Should return null when token value is empty string");
+        // empty string value
+        Value emptyValue = mock(Value.class);
+        when(emptyValue.getString()).thenReturn("");
+        when(user.getProperty(connectionPath)).thenReturn(new Value[] {emptyValue});
+        assertNull(tokenStore.getIdToken(connection, mockResolver));
     }
 
     @Test
     void getIdToken_decryptionFails() throws RepositoryException {
         CryptoService failingCrypto = mock(CryptoService.class);
-        when(failingCrypto.decrypt("bad-encrypted")).thenThrow(new RuntimeException("Decryption failed"));
+        when(failingCrypto.decrypt("bad")).thenThrow(new RuntimeException("fail"));
         Value value = mock(Value.class);
+        when(value.getString()).thenReturn("bad");
         when(user.hasProperty(connectionPath)).thenReturn(true);
         when(user.getProperty(connectionPath)).thenReturn(new Value[] {value});
-        when(value.getString()).thenReturn("bad-encrypted");
-
-        JcrUserHomeOAuthTokenStore failingTokenStore = new JcrUserHomeOAuthTokenStore(failingCrypto);
-        String result = failingTokenStore.getIdToken(connection, mockResolver);
-
-        assertNull(result, "Should return null when decryption fails");
+        assertNull(new JcrUserHomeOAuthTokenStore(failingCrypto).getIdToken(connection, mockResolver));
     }
 
     @Test
     void getIdToken_repositoryException() throws RepositoryException {
-        when(user.hasProperty(connectionPath)).thenThrow(new RepositoryException("Test repository error"));
-
-        assertThrows(
-                OAuthException.class,
-                () -> tokenStore.getIdToken(connection, mockResolver),
-                "Should throw OAuthException on RepositoryException");
+        when(user.hasProperty(connectionPath)).thenThrow(new RepositoryException());
+        assertThrows(OAuthException.class, () -> tokenStore.getIdToken(connection, mockResolver));
     }
 }

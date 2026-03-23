@@ -154,7 +154,9 @@ public class InMemoryOAuthTokenStore implements OAuthTokenStore {
     @Override
     public @Nullable String getIdToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver)
             throws OAuthException {
-        return null;
+        Value value = storage.get(new Key(connection.name(), resolver.getUserID()));
+        if (value == null) return null;
+        return value.tokens().idToken();
     }
 
     public Stream<OAuthTokens> allTokens() {

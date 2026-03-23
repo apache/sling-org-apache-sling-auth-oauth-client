@@ -40,7 +40,7 @@ import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Component(property = "service.ranking:Integer=0")
+@Component
 public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
 
     private static final String PROPERTY_NAME_EXPIRES_AT = "expires_at";
