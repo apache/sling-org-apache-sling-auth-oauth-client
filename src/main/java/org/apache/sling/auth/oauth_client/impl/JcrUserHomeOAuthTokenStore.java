@@ -152,6 +152,56 @@ public class JcrUserHomeOAuthTokenStore implements OAuthTokenStore {
         }
     }
 
+    @Override
+    public @Nullable String getIdToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver)
+            throws OAuthException {
+        try {
+            User user = adaptToUser(resolver);
+
+            // Try multiple property paths: oauth-tokens/{connection}/id_token (stored by persistTokens),
+            // then profile/id_token (common when sync stores on profile), then id_token (bare name)
+            for (String relPath : new String[] {
+                propertyPath(connection, PROPERTY_NAME_ID_TOKEN),
+                PROFILE_PREFIX + PROPERTY_NAME_ID_TOKEN,
+                PROPERTY_NAME_ID_TOKEN
+            }) {
+                String encrypted = readEncryptedProperty(user, relPath);
+                if (encrypted != null) {
+                    return decryptIdToken(encrypted, resolver.getUserID());
+                }
+            }
+
+            logger.debug("No id_token found for user {} in Oak", resolver.getUserID());
+            return null;
+        } catch (RepositoryException e) {
+            throw new OAuthException("Repository error reading id_token", e);
+        }
+    }
+
+    private @Nullable String readEncryptedProperty(@NotNull User user, @NotNull String relPath)
+            throws RepositoryException {
+        if (!user.hasProperty(relPath)) return null;
+        Value[] values = user.getProperty(relPath);
+        if (values == null || values.length == 0) return null;
+        String encrypted = values[0].getString();
+        return (encrypted != null && !encrypted.isEmpty()) ? encrypted : null;
+    }
+
+    private @Nullable String decryptIdToken(@NotNull String encrypted, @NotNull String safeUserId) {
+        try {
+            String decrypted = cryptoService.decrypt(encrypted);
+            logger.debug("Successfully retrieved and decrypted id_token for user {}", safeUserId);
+            return decrypted;
+        } catch (Exception e) {
+            logger.error(
+                    "Failed to decrypt id_token for user {}. IdP may not properly invalidate session. Error: {}",
+                    safeUserId,
+                    e.getMessage(),
+                    e);
+            return null;
+        }
+    }
+
     private void setTokenProperty(
             @NotNull User user,
             @NotNull ValueFactory valueFactory,

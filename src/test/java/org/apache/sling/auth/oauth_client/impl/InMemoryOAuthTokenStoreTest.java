@@ -18,14 +18,19 @@
  */
 package org.apache.sling.auth.oauth_client.impl;
 
+import com.nimbusds.oauth2.sdk.token.BearerAccessToken;
+import com.nimbusds.openid.connect.sdk.token.OIDCTokens;
 import org.apache.sling.auth.oauth_client.InMemoryOAuthTokenStore;
 import org.apache.sling.testing.mock.sling.ResourceResolverType;
 import org.apache.sling.testing.mock.sling.junit5.SlingContext;
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 @Testcontainers
-public class InMemoryOAuthTokenStoreTest extends TokenStoreTestSupport<InMemoryOAuthTokenStore> {
+class InMemoryOAuthTokenStoreTest extends TokenStoreTestSupport<InMemoryOAuthTokenStore> {
 
     InMemoryOAuthTokenStoreTest() {
         super(MockOidcConnection.DEFAULT_CONNECTION, new SlingContext(ResourceResolverType.JCR_MOCK));
@@ -35,5 +40,27 @@ public class InMemoryOAuthTokenStoreTest extends TokenStoreTestSupport<InMemoryO
     @NotNull
     InMemoryOAuthTokenStore createTokenStore() {
         return new InMemoryOAuthTokenStore();
+    }
+
+    @Test
+    void getIdToken_missing() {
+        assertThat(createTokenStore().getIdToken(connection, context.resourceResolver()))
+                .isNull();
+    }
+
+    @Test
+    void getIdToken_persisted() {
+        OIDCTokens tokens = new OIDCTokens("eyJ.id.token", new BearerAccessToken(12), null);
+        InMemoryOAuthTokenStore store = createTokenStore();
+        store.persistTokens(connection, context.resourceResolver(), Converter.toSlingOAuthTokens(tokens));
+        assertThat(store.getIdToken(connection, context.resourceResolver())).isEqualTo("eyJ.id.token");
+    }
+
+    @Test
+    void getIdToken_notStoredWhenNull() {
+        OIDCTokens tokens = new OIDCTokens(new BearerAccessToken(12), null);
+        InMemoryOAuthTokenStore store = createTokenStore();
+        store.persistTokens(connection, context.resourceResolver(), Converter.toSlingOAuthTokens(tokens));
+        assertThat(store.getIdToken(connection, context.resourceResolver())).isNull();
     }
 }

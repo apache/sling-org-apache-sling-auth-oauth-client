@@ -27,6 +27,7 @@ import com.nimbusds.oauth2.sdk.GeneralException;
 import com.nimbusds.oauth2.sdk.id.Issuer;
 import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.osgi.service.component.annotations.Component;
 
 /**
@@ -70,5 +71,16 @@ public class OidcProviderMetadataRegistry {
 
     public @NotNull String getIssuer(@NotNull String base) {
         return getProviderMetadata(base).getIssuer().getValue();
+    }
+
+    /**
+     * Returns the end_session_endpoint URI from the OIDC provider metadata, if advertised.
+     * Used for SP-initiated single logout (RP-Initiated Logout).
+     *
+     * @param base the IdP base URL (issuer)
+     * @return the end session endpoint URI, or null if not advertised by the provider
+     */
+    public @Nullable URI getEndSessionEndpointURI(@NotNull String base) {
+        return getProviderMetadata(base).getEndSessionEndpointURI();
     }
 }

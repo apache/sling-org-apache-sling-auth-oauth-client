@@ -63,6 +63,13 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         boolean storeRefreshToken() default false;
 
         @AttributeDefinition(
+                name = "storeIdToken",
+                description =
+                        "Store the ID Token in credentials for use during logout (id_token_hint at IdP end_session_endpoint). "
+                                + "Requires the login cookie manager to persist it (e.g. SlingLoginCookieManager).")
+        boolean storeIdToken() default false;
+
+        @AttributeDefinition(
                 name = "groupsClaimName",
                 description = "Name of the claim in the ID Token or UserInfo that contains the groups. "
                         + "If not set, the default 'groups' is used")
@@ -82,6 +89,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
     private final CryptoService cryptoService;
     private final boolean storeAccessToken;
     private final boolean storeRefreshToken;
+    private final boolean storeIdToken;
     private final boolean groupsInIdToken;
     private final String groupsClaimName;
     private final String connection;
@@ -93,6 +101,7 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
         this.cryptoService = service;
         this.storeAccessToken = config.storeAccessToken();
         this.storeRefreshToken = config.storeRefreshToken();
+        this.storeIdToken = config.storeIdToken();
         this.groupsInIdToken = config.groupsInIdToken();
         this.groupsClaimName = config.groupsClaimName();
         if (config.connection() == null || config.connection().isEmpty()) {
@@ -129,27 +138,17 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
             // If groups are not in ID Token, add them from UserInfo
             userInfo.toJSONObject().forEach((key, value) -> {
                 if (value != null) {
-                    credentials.setAttribute("profile/" + key, value.toString());
+                    credentials.setAttribute(OAuthTokenStore.PROFILE_PREFIX + key, value.toString());
                 }
             });
         }
 
         if (groupsInIdToken) {
             // If groups are in ID Token, add them to the credentials
-            try {
-                Object groups = tokenResponse
-                        .toSuccessResponse()
-                        .getTokens()
-                        .toOIDCTokens()
-                        .getIDToken()
-                        .getJWTClaimsSet()
-                        .getClaim(groupsClaimName);
-                if (groups instanceof List) {
-                    logger.debug("Groups from ID Token: {}", groups);
-                    ((List) groups).forEach(group -> credentials.addGroup(getGroupName(idp, group)));
-                }
-            } catch (java.text.ParseException e) {
-                throw new RuntimeException(e);
+            Object groups = Converter.extractIdTokenClaim(tokens.idToken(), groupsClaimName);
+            if (groups instanceof List) {
+                logger.debug("Groups from ID Token: {}", groups);
+                ((List) groups).forEach(group -> credentials.addGroup(getGroupName(idp, group)));
             }
         } else if (userInfo != null) {
             // If groups are not in ID Token, check UserInfo for groups
@@ -181,6 +180,24 @@ public class SlingUserInfoProcessorImpl implements UserInfoProcessor {
                     OAuthTokenStore.PROPERTY_NAME_REFRESH_TOKEN);
         }
 
+        // Store the ID Token for logout (id_token_hint at IdP end_session_endpoint)
+        // SECURITY NOTE: The ID token is encrypted before storage but increases the attack surface.
+        // Ensure proper access controls on user profile storage and rotation of encryption keys.
+        String idToken = tokens.idToken();
+        if (storeIdToken && idToken != null && !idToken.isEmpty()) {
+            try {
+                credentials.setAttribute(OAuthTokenStore.PROPERTY_NAME_ID_TOKEN, cryptoService.encrypt(idToken));
+                logger.debug("ID token stored (encrypted) for logout support");
+            } catch (RuntimeException e) {
+                logger.error("Failed to encrypt ID token for logout: {}", e.getMessage(), e);
+            }
+        } else if (storeIdToken) {
+            logger.debug("ID token is null or empty; cannot store for logout");
+        }
+
+        // The returned credentials are passed to Oak's LoginModule, which delegates to a registered
+        // SynchronizationHandler (e.g. DefaultSyncHandler) to create or update the JCR user and
+        // synchronize group memberships based on the attributes and groups set above.
         return credentials;
     }
 

@@ -56,4 +56,13 @@ public interface LoginCookieManager {
      */
     @Nullable
     Cookie getLoginCookie(@NotNull HttpServletRequest request);
+
+    /**
+     * Clear the login cookie in the response so the user is logged out locally.
+     * Used for SP-initiated single logout.
+     *
+     * @param request the request (used to determine cookie path and secure flag)
+     * @param response the response to add the clearing cookie to
+     */
+    void clearLoginCookie(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response);
 }

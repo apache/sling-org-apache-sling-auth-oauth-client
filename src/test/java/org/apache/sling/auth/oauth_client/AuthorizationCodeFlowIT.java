@@ -37,6 +37,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -75,6 +76,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static java.lang.String.format;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -100,6 +102,7 @@ class AuthorizationCodeFlowIT {
     private static final String EXTERNAL_LOGIN_MODULE_FACTORY_PID =
             "org.apache.jackrabbit.oak.spi.security.authentication.external.impl.ExternalLoginModuleFactory";
     public static final String TEST_PATH = "/content/test-1";
+    private static final String LOGOUT_PATH = "/system/sling/logout";
     private KeycloakContainer keycloak;
     private SlingClient sling;
     private SlingClient slingUser;
@@ -137,6 +140,8 @@ class AuthorizationCodeFlowIT {
     void initSling() throws ClientException, InterruptedException, TimeoutException {
 
         slingPort = Integer.getInteger("sling.http.port", 8080);
+        waitForSlingReady(slingPort);
+
         sling = SlingClient.Builder.create(URI.create("http://localhost:" + slingPort), "admin", "admin")
                 .disableRedirectHandling()
                 .build();
@@ -169,6 +174,31 @@ class AuthorizationCodeFlowIT {
     @AfterEach
     void uninstallBundle() throws ClientException {
         supportBundle.uninstall(sling.adaptTo(OsgiConsoleClient.class));
+    }
+
+    /**
+     * Waits until Sling is accepting HTTP connections on the given port. This avoids "connection refused"
+     * when the feature-launcher has signalled readiness slightly before the server is fully up.
+     */
+    private static void waitForSlingReady(int port) {
+        int timeoutSeconds = Integer.getInteger("it.startTimeoutSeconds", 60);
+        URI baseUri = URI.create("http://localhost:" + port + "/");
+        await().atMost(timeoutSeconds, SECONDS)
+                .pollInterval(500, TimeUnit.MILLISECONDS)
+                .until(() -> {
+                    try {
+                        HttpClient client = HttpClient.newBuilder()
+                                .connectTimeout(Duration.ofSeconds(2))
+                                .build();
+                        HttpRequest request =
+                                HttpRequest.newBuilder().uri(baseUri).GET().build();
+                        HttpResponse<String> response =
+                                client.send(request, BodyHandlers.ofString(StandardCharsets.UTF_8));
+                        return response.statusCode() >= 200 && response.statusCode() < 500;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                });
     }
 
     @Test
@@ -379,6 +409,8 @@ class AuthorizationCodeFlowIT {
                 .editConfiguration(SlingLoginCookieManager.class.getName(), null, Map.of("idpName", "oidc-idp")));
 
         String oidcConnectionName = "keycloak";
+        String keycloakBaseUrl = "http://localhost:" + keycloakPort + "/realms/sling";
+        String keycloakEndSessionUrl = keycloakBaseUrl + "/protocol/openid-connect/logout";
 
         // configure connection to keycloak
         if (withPkce) {
@@ -390,13 +422,15 @@ class AuthorizationCodeFlowIT {
                                     "name",
                                     oidcConnectionName,
                                     "baseUrl",
-                                    "http://localhost:" + keycloakPort + "/realms/sling",
+                                    keycloakBaseUrl,
                                     "clientId",
                                     "oidc-pkce",
                                     "pkceEnabled",
                                     "true",
                                     "scopes",
-                                    new String[] {"openid"})));
+                                    new String[] {"openid"},
+                                    "endSessionEndpoint",
+                                    keycloakEndSessionUrl)));
         } else {
             configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
                     .editConfiguration(
@@ -406,13 +440,15 @@ class AuthorizationCodeFlowIT {
                                     "name",
                                     oidcConnectionName,
                                     "baseUrl",
-                                    "http://localhost:" + keycloakPort + "/realms/sling",
+                                    keycloakBaseUrl,
                                     "clientId",
                                     "oidc-test",
                                     "clientSecret",
                                     "wM2XIbxBTLJAac2rJSuHyKaoP8IWvSwJ",
                                     "scopes",
-                                    new String[] {"openid"})));
+                                    new String[] {"openid"},
+                                    "endSessionEndpoint",
+                                    keycloakEndSessionUrl)));
         }
         configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
                 .editConfiguration(
@@ -460,6 +496,7 @@ class AuthorizationCodeFlowIT {
                         Map.of(
                                 "storeAccessToken", "true",
                                 "storeRefreshToken", "true",
+                                "storeIdToken", "true",
                                 "connection", oidcConnectionName)));
 
         HashMap<String, Object> authenticationHandlerConfig = new HashMap<>();
@@ -468,7 +505,9 @@ class AuthorizationCodeFlowIT {
         authenticationHandlerConfig.put("defaultRedirect", TEST_PATH + ".html");
         authenticationHandlerConfig.put(
                 "callbackUri", "http://localhost:" + slingPort + TEST_PATH + "/j_security_check");
-
+        authenticationHandlerConfig.put("logoutRedirectPath", "/");
+        authenticationHandlerConfig.put("enableSPInitiatedSingleLogout", "true");
+        authenticationHandlerConfig.put("logoutRedirectAllowedHosts", new String[] {"localhost"});
         authenticationHandlerConfig.put("pkceEnabled", Boolean.toString(withPkce));
         authenticationHandlerConfig.put("idp", "oidc-idp");
 
@@ -574,11 +613,15 @@ class AuthorizationCodeFlowIT {
                 .collect(Collectors.toList());
 
         headers = new ArrayList<>();
-        String cookieHeader = "";
+        StringBuilder cookieHeader = new StringBuilder();
         for (Cookie cookie : cookies) {
-            cookieHeader += cookie.getName() + "=" + cookie.getValue() + "; ";
+            cookieHeader
+                    .append(cookie.getName())
+                    .append("=")
+                    .append(cookie.getValue())
+                    .append("; ");
         }
-        headers.add(new BasicHeader("Cookie", cookieHeader));
+        headers.add(new BasicHeader("Cookie", cookieHeader.toString()));
         SlingHttpResponse authenticatedResponse = slingUser.doGet(redirectUri.getRawPath(), params, headers, 302);
         Header[] cookieHeaders = authenticatedResponse.getHeaders("set-cookie");
         // retrieve the login-cookie header
@@ -592,6 +635,23 @@ class AuthorizationCodeFlowIT {
 
         // Get the page from sling with login cookie
         slingUser.doGet(TEST_PATH + ".json", new ArrayList<>(), headers, 200);
+
+        // Single logout: GET /system/sling/logout?resource=<protected path> so the Authenticator
+        // invokes the OIDC handler (getHandlerSelectionPath uses the resource param via LOGIN_RESOURCE).
+        List<NameValuePair> logoutParams = List.of(new BasicNameValuePair("resource", TEST_PATH));
+        SlingHttpResponse logoutResponse = slingUser.doGet(LOGOUT_PATH, logoutParams, headers, 302);
+        Header logoutLocation = logoutResponse.getFirstHeader("location");
+        assertThat(logoutLocation).as("Logout redirect Location").isNotNull();
+        String location = logoutLocation.getValue();
+        assertThat(location)
+                .as("Location must redirect to Keycloak end_session endpoint")
+                .startsWith(keycloakEndSessionUrl);
+        assertThat(location)
+                .as("Location must contain post_logout_redirect_uri")
+                .contains("post_logout_redirect_uri=");
+        assertThat(location)
+                .as("post_logout_redirect_uri should point to configured logout path")
+                .contains(URLEncoder.encode("http://localhost:" + slingPort + "/", StandardCharsets.UTF_8));
     }
 
     private String getUserPath(SlingClient sling, String authorizableId) throws ClientException {

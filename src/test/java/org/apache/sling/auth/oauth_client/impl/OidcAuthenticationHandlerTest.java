@@ -33,6 +33,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
@@ -65,6 +66,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.osgi.framework.BundleContext;
 import org.osgi.util.converter.Converters;
 
@@ -72,6 +76,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(OsgiContextExtension.class)
@@ -79,6 +85,7 @@ class OidcAuthenticationHandlerTest {
 
     private static final String MOCK_OIDC_PARAM = "mock-oidc-param";
     private static final String ISSUER = "myIssuer";
+    private static final String TEST_IDP_END_SESSION_URL = "https://idp.example.com/oidc/logout";
     private OsgiContext osgiContext = new OsgiContext();
     private BundleContext bundleContext;
     private List<ClientConnection> connections;
@@ -91,6 +98,7 @@ class OidcAuthenticationHandlerTest {
     private HttpServletResponse response;
     private HttpServer tokenEndpointServer;
     private CryptoService cryptoService = new StubCryptoService();
+    private OidcLogoutHandler logoutHandler;
     HttpServer idpServer;
 
     @BeforeEach
@@ -99,17 +107,27 @@ class OidcAuthenticationHandlerTest {
         idpServer = createHttpServer();
 
         bundleContext = osgiContext.bundleContext();
-        config = mock(OidcAuthenticationHandler.Config.class);
-        when(config.idp()).thenReturn("myIdP");
-        when(config.path()).thenReturn(new String[] {"/"});
-        when(config.requestKeyCookieMaxAgeSeconds()).thenReturn(300);
+
+        // Create config using Converters pattern
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("idp", "myIdP");
+        configMap.put("path", new String[] {"/"});
+        configMap.put("requestKeyCookieMaxAgeSeconds", 300);
+        configMap.put("userInfoEnabled", true);
+        configMap.put("pkceEnabled", false);
+        configMap.put("enableSPInitiatedSingleLogout", false);
+        configMap.put("logoutRedirectPath", "/");
+        configMap.put("logoutRedirectAllowedHosts", new String[] {});
+        config = Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
+
         loginCookieManager = mock(LoginCookieManager.class);
+        logoutHandler = new OidcLogoutHandler(null);
 
         SlingUserInfoProcessorImpl.Config userInfoConfig = Converters.standardConverter()
                 .convert(Map.of(
                         "storeAccessToken", false,
                         "storeRefreshToken", false,
-                        "connection", "mock-oidc-param",
+                        "connection", MOCK_OIDC_PARAM, // Match MOCK_OIDC_PARAM constant
                         "groupsInIdToken", false,
                         "groupsClaimName", "groups"))
                 .to(SlingUserInfoProcessorImpl.Config.class);
@@ -118,8 +136,6 @@ class OidcAuthenticationHandlerTest {
         userInfoProcessors = new ArrayList<>();
         userInfoProcessors.add(userInfoProcessor);
 
-        when(config.userInfoEnabled()).thenReturn(true);
-        when(config.pkceEnabled()).thenReturn(false);
         connections = new ArrayList<>();
         connections.add(MockOidcConnection.DEFAULT_CONNECTION);
 
@@ -251,7 +267,7 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 getOidcProviderMetadataRegistry()));
 
-        when(config.callbackUri()).thenReturn("http://redirect");
+        config = createConfig(Map.of("callbackUri", "http://redirect"));
 
         when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1");
         Cookie[] cookies = createMockCookies();
@@ -286,7 +302,7 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 getOidcProviderMetadataRegistry()));
 
-        when(config.callbackUri()).thenReturn("http://redirect");
+        config = createConfig(Map.of("callbackUri", "http://redirect"));
 
         when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1");
         Cookie[] cookies = createMockCookies();
@@ -324,7 +340,7 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 getOidcProviderMetadataRegistry("http://jfdljfioewms")));
 
-        when(config.callbackUri()).thenReturn("http://redirect");
+        config = createConfig(Map.of("callbackUri", "http://redirect"));
 
         when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1");
         Cookie[] cookies = createMockCookies();
@@ -362,7 +378,7 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 getOidcProviderMetadataRegistry("httjfdljfioewms")));
 
-        when(config.callbackUri()).thenReturn("http://redirect");
+        config = createConfig(Map.of("callbackUri", "http://redirect"));
 
         when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1");
         Cookie[] cookies = createMockCookies();
@@ -431,8 +447,9 @@ class OidcAuthenticationHandlerTest {
 
     @Test
     void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithUserInfo() throws JOSEException {
+        config = createConfig(Map.of("userInfoEnabled", true));
+
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
-        when(config.userInfoEnabled()).thenReturn(true);
         // Test with an id token signed by another key, and expired
         AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(
                 createIdToken(rsaJWK, "client-id", ISSUER),
@@ -450,7 +467,7 @@ class OidcAuthenticationHandlerTest {
     void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithMissingUserInfo()
             throws JOSEException {
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
-        when(config.userInfoEnabled()).thenReturn(true);
+        config = createConfig(Map.of("userInfoEnabled", true));
         userInfoProcessors = new ArrayList<>();
         createOidcAuthenticationHandler();
 
@@ -471,7 +488,7 @@ class OidcAuthenticationHandlerTest {
     void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithUserInfo_WithInvalidNonce()
             throws JOSEException {
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
-        when(config.userInfoEnabled()).thenReturn(true);
+        config = createConfig(Map.of("userInfoEnabled", true));
 
         Cookie stateCookie = mock(Cookie.class);
         when(stateCookie.getName()).thenReturn(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
@@ -495,8 +512,7 @@ class OidcAuthenticationHandlerTest {
             extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithUserInfo_WithPkceEnabledWithCookie()
                     throws JOSEException {
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
-        when(config.userInfoEnabled()).thenReturn(true);
-        when(config.pkceEnabled()).thenReturn(true);
+        config = createConfig(Map.of("userInfoEnabled", true, "pkceEnabled", true));
 
         Cookie stateCookie = mock(Cookie.class);
         when(stateCookie.getName()).thenReturn(OAuthCookieValue.COOKIE_NAME_REQUEST_KEY);
@@ -522,7 +538,7 @@ class OidcAuthenticationHandlerTest {
     void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithoutUserInfo()
             throws JOSEException {
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
-        when(config.userInfoEnabled()).thenReturn(false);
+        config = createConfig(Map.of("userInfoEnabled", false));
         // Test with an id token signed by another key, and expired
         AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(
                 createIdToken(rsaJWK, "client-id", ISSUER),
@@ -539,7 +555,7 @@ class OidcAuthenticationHandlerTest {
     void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithInvalidUserInfo()
             throws JOSEException {
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
-        when(config.userInfoEnabled()).thenReturn(true);
+        config = createConfig(Map.of("userInfoEnabled", true));
 
         idpServer.createContext("/token", exchange -> {
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -574,9 +590,7 @@ class OidcAuthenticationHandlerTest {
                 idpServer.getAddress().getHostName() + ":"
                         + idpServer.getAddress().getPort());
 
-        when(config.callbackUri()).thenReturn("http://redirect");
-
-        when(config.callbackUri()).thenReturn("http://redirect");
+        config = createConfig(Map.of("callbackUri", "http://redirect"));
 
         // This is the class used by Sling to configure the Authentication Handler
         OidcProviderMetadataRegistry oidcProviderMetadataRegistry = getOidcProviderMetadataRegistry();
@@ -588,7 +602,6 @@ class OidcAuthenticationHandlerTest {
                 "http://localhost:" + idpServer.getAddress().getPort(),
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
-        when(config.callbackUri()).thenReturn("http://redirect");
 
         when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1");
         Cookie[] cookies = createMockCookies();
@@ -628,7 +641,7 @@ class OidcAuthenticationHandlerTest {
     void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithUnparsableUserInfo()
             throws JOSEException {
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
-        when(config.userInfoEnabled()).thenReturn(true);
+        config = createConfig(Map.of("userInfoEnabled", true));
 
         idpServer.createContext("/token", exchange -> {
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -663,9 +676,7 @@ class OidcAuthenticationHandlerTest {
                 idpServer.getAddress().getHostName() + ":"
                         + idpServer.getAddress().getPort());
 
-        when(config.callbackUri()).thenReturn("http://redirect");
-
-        when(config.callbackUri()).thenReturn("http://redirect");
+        config = createConfig(Map.of("callbackUri", "http://redirect"));
 
         // This is the class used by Sling to configure the Authentication Handler
         OidcProviderMetadataRegistry oidcProviderMetadataRegistry = getOidcProviderMetadataRegistry();
@@ -677,7 +688,6 @@ class OidcAuthenticationHandlerTest {
                 "http://localhost:" + idpServer.getAddress().getPort(),
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
-        when(config.callbackUri()).thenReturn("http://redirect");
 
         when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1");
         Cookie[] cookies = createMockCookies();
@@ -765,8 +775,6 @@ class OidcAuthenticationHandlerTest {
 
         configureWellKnownOidcMetadata(idpServer, rsaJWK, baseUrl);
 
-        when(config.callbackUri()).thenReturn("http://redirect");
-
         // This is the class used by Sling to configure the Authentication Handler
         OidcProviderMetadataRegistry oidcProviderMetadataRegistry = getOidcProviderMetadataRegistry();
         connections.add(new MockOidcConnection(
@@ -777,7 +785,6 @@ class OidcAuthenticationHandlerTest {
                 "http://localhost:" + idpServer.getAddress().getPort(),
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
-        when(config.callbackUri()).thenReturn("http://redirect");
 
         when(request.getQueryString()).thenReturn("code=authorizationCode&state=part1");
         when(request.getCookies()).thenReturn(cookies);
@@ -829,9 +836,41 @@ class OidcAuthenticationHandlerTest {
         });
     }
 
+    /**
+     * Creates a config with default values that can be overridden.
+     * Tests can call this to recreate config with specific overrides.
+     */
+    private OidcAuthenticationHandler.Config createConfig(Map<String, Object> overrides) {
+        Map<String, Object> configMap = new HashMap<>();
+        // Default values
+        configMap.put("idp", "myIdP");
+        configMap.put("path", new String[] {"/"});
+        configMap.put("requestKeyCookieMaxAgeSeconds", 300);
+        configMap.put("userInfoEnabled", true);
+        configMap.put("pkceEnabled", false);
+        configMap.put("enableSPInitiatedSingleLogout", false);
+        configMap.put("logoutRedirectPath", "/");
+        configMap.put("logoutRedirectAllowedHosts", new String[] {});
+        configMap.put("callbackUri", "callbackUri");
+        configMap.put("defaultConnectionName", "");
+        configMap.put("resource", new String[] {});
+        configMap.put("logoutServiceUserName", "");
+
+        // Apply overrides
+        configMap.putAll(overrides);
+
+        return Converters.standardConverter().convert(configMap).to(OidcAuthenticationHandler.Config.class);
+    }
+
     private void createOidcAuthenticationHandler() {
         oidcAuthenticationHandler = new OidcAuthenticationHandler(
-                bundleContext, connections, config, loginCookieManager, userInfoProcessors, cryptoService);
+                bundleContext,
+                connections,
+                config,
+                loginCookieManager,
+                userInfoProcessors,
+                cryptoService,
+                logoutHandler);
     }
 
     private HttpServer createHttpServer() throws IOException {
@@ -861,10 +900,15 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
-        when(config.path()).thenReturn(new String[] {"/"});
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "callbackUri",
+                "http://redirect",
+                "pkceEnabled",
+                false,
+                "path",
+                new String[] {"/"}));
 
         createOidcAuthenticationHandler();
 
@@ -899,9 +943,8 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
+        config = createConfig(Map.of(
+                "defaultConnectionName", MOCK_OIDC_PARAM, "callbackUri", "http://redirect", "pkceEnabled", false));
 
         when(request.getRequestURI()).thenReturn("/");
         MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
@@ -953,14 +996,17 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "callbackUri",
+                "http://redirect",
+                "pkceEnabled",
+                true,
+                "path",
+                new String[] {"/"}));
 
         MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
-
-        when(config.pkceEnabled()).thenReturn(true);
-        when(config.path()).thenReturn(new String[] {"/"});
 
         when(request.getRequestURI()).thenReturn("/");
 
@@ -1027,8 +1073,7 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
+        config = createConfig(Map.of("defaultConnectionName", MOCK_OIDC_PARAM, "callbackUri", "http://redirect"));
 
         when(request.getParameter("c")).thenReturn("unknown-connection");
         MockSlingHttpServletResponse response1 = new MockSlingHttpServletResponse();
@@ -1039,10 +1084,186 @@ class OidcAuthenticationHandlerTest {
         assertEquals("Client requested unknown connection", response1.getStatusMessage());
     }
 
-    @Test
-    void dropCredentials() {
-        // TODO this test doesn't verify anything
+    static Stream<Arguments> redirectPathScenarios() {
+        return Stream.of(
+                // logoutRedirectPath, redirectParam, expectedEncodedUri
+                Arguments.of(null, null, "http%3A%2F%2Flocalhost%3A8080%2F"),
+                Arguments.of("/goodbye", null, "http%3A%2F%2Flocalhost%3A8080%2Fgoodbye"),
+                Arguments.of(
+                        "/default", "/custom/logout/page", "http%3A%2F%2Flocalhost%3A8080%2Fcustom%2Flogout%2Fpage"),
+                Arguments.of("/default", "https://evil.com/malicious", "http%3A%2F%2Flocalhost%3A8080%2Fdefault"),
+                Arguments.of("/default", "//evil.com/malicious", "http%3A%2F%2Flocalhost%3A8080%2Fdefault"),
+                Arguments.of("/default", "", "http%3A%2F%2Flocalhost%3A8080%2Fdefault"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("redirectPathScenarios")
+    void dropCredentials_redirectPath(String logoutRedirectPath, String redirectParam, String expectedEncodedUri)
+            throws IOException {
+        setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
+        Map<String, Object> configOverrides = new HashMap<>(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "enableSPInitiatedSingleLogout",
+                true,
+                "logoutRedirectAllowedHosts",
+                new String[] {"localhost"}));
+        if (logoutRedirectPath != null) {
+            configOverrides.put("logoutRedirectPath", logoutRedirectPath);
+        }
+        config = createConfig(configOverrides);
+        setupLogoutRequest("http", "localhost", 8080, redirectParam);
+
+        createOidcAuthenticationHandler();
         oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, expectedEncodedUri);
+    }
+
+    @Test
+    void dropCredentials_doesNotRedirectWhenResponseAlreadyCommitted() throws IOException {
+        connections.clear();
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "https://idp.example.com",
+                new String[0],
+                null,
+                TEST_IDP_END_SESSION_URL));
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "enableSPInitiatedSingleLogout",
+                true,
+                "logoutRedirectAllowedHosts",
+                new String[] {"localhost"}));
+        setupLogoutRequest("http", "localhost", 8080, null);
+        when(response.isCommitted()).thenReturn(true);
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verify(loginCookieManager).clearLoginCookie(request, response);
+        verify(response, never()).sendRedirect(anyString());
+    }
+
+    // Distinct from dropCredentials_redirectPath: here the spoofing is in the HTTP Host header
+    // (request server name is evil.com, not in allowed hosts), so the redirect host must be
+    // replaced with one from logoutRedirectAllowedHosts. dropCredentials_redirectPath only tests
+    // a malicious redirect *parameter* while the request host is already trusted.
+    @Test
+    void dropCredentials_allowedHostsReplacesSpoofedHost() throws IOException {
+        setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "enableSPInitiatedSingleLogout",
+                true,
+                "logoutRedirectAllowedHosts",
+                new String[] {"safe.example.com", "other.example.com"}));
+        setupLogoutRequest("https", "evil.com", 443, null);
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        org.mockito.ArgumentCaptor<String> redirectCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(response).sendRedirect(redirectCaptor.capture());
+        String redirectUrl = redirectCaptor.getValue();
+        assertTrue(redirectUrl.startsWith(TEST_IDP_END_SESSION_URL), "Redirect should go to IdP end_session");
+        assertTrue(redirectUrl.contains("post_logout_redirect_uri="), "Should contain post_logout_redirect_uri");
+        assertTrue(
+                redirectUrl.contains("safe.example.com") || redirectUrl.contains("other.example.com"),
+                "Should use allowed host instead of spoofed");
+        assertFalse(redirectUrl.contains("evil.com"), "Must not use spoofed host");
+    }
+
+    // Happy path for host validation: request host (localhost) is in logoutRedirectAllowedHosts,
+    // so the redirect preserves it as-is. Complements dropCredentials_allowedHostsReplacesSpoofedHost
+    // which covers the case where the request host is not trusted and must be replaced.
+    @Test
+    void dropCredentials_allowedHostsAllowsConfiguredHost() throws IOException {
+        setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "enableSPInitiatedSingleLogout",
+                true,
+                "logoutRedirectAllowedHosts",
+                new String[] {"localhost", "myapp.example.com"}));
+        setupLogoutRequest("http", "localhost", 8080, null);
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, "http%3A%2F%2Flocalhost%3A8080%2F");
+    }
+
+    @Test
+    void dropCredentials_loginCookieManagerNull_doesNotThrowAndRedirects() throws IOException {
+        loginCookieManager = null;
+        setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "enableSPInitiatedSingleLogout",
+                true,
+                "logoutRedirectAllowedHosts",
+                new String[] {"localhost"}));
+        setupLogoutRequest("http", "localhost", 8080, null);
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, "http%3A%2F%2Flocalhost%3A8080%2F");
+    }
+
+    @Test
+    void dropCredentials_withRelativeRedirectParameter_usesParamAsIs() throws IOException {
+        setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "enableSPInitiatedSingleLogout",
+                true,
+                "logoutRedirectAllowedHosts",
+                new String[] {"localhost"},
+                "logoutRedirectPath",
+                "/default"));
+        setupLogoutRequest("http", "localhost", 8080, "/custom/logout"); // Sling always deploys at root
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        verifyIdpLogoutRedirect(TEST_IDP_END_SESSION_URL, "http%3A%2F%2Flocalhost%3A8080%2Fcustom%2Flogout");
+    }
+
+    @Test
+    void dropCredentials_withRelativeRedirectParameter_disallowedRequestHost_usesSafeHost() throws IOException {
+        setupConnectionWithLogout(TEST_IDP_END_SESSION_URL);
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "enableSPInitiatedSingleLogout",
+                true,
+                "logoutRedirectAllowedHosts",
+                new String[] {"safe.example.com"},
+                "logoutRedirectPath",
+                "/default"));
+        setupLogoutRequest("https", "evil.com", 443, "/custom/logout");
+
+        createOidcAuthenticationHandler();
+        oidcAuthenticationHandler.dropCredentials(request, response);
+
+        // Relative redirect with spoofed host should use safe host
+        org.mockito.ArgumentCaptor<String> redirectCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(response).sendRedirect(redirectCaptor.capture());
+        String redirectUrl = redirectCaptor.getValue();
+        assertTrue(redirectUrl.startsWith(TEST_IDP_END_SESSION_URL), "Should go to IdP end_session");
+        assertTrue(redirectUrl.contains("post_logout_redirect_uri="), "Should contain post_logout_redirect_uri");
+        assertTrue(redirectUrl.contains("safe.example.com"), "Should use safe host instead of spoofed");
+        assertTrue(redirectUrl.contains("%2Fcustom%2Flogout"), "Should use custom logout path");
     }
 
     @Test
@@ -1076,7 +1297,7 @@ class OidcAuthenticationHandlerTest {
         MockSlingHttpServletRequest mockRequest = new MockSlingHttpServletRequest(bundleContext);
         mockRequest.setAttribute(OidcAuthenticationHandler.REDIRECT_ATTRIBUTE_NAME, "http://localhost:8080");
 
-        when(config.pkceEnabled()).thenReturn(true);
+        config = createConfig(Map.of("pkceEnabled", true));
         createOidcAuthenticationHandler();
 
         assertTrue(oidcAuthenticationHandler.authenticationSucceeded(mockRequest, mockResponse, authInfo));
@@ -1135,10 +1356,15 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
-        when(config.path()).thenReturn(new String[] {"/"});
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "callbackUri",
+                "http://redirect",
+                "pkceEnabled",
+                false,
+                "path",
+                new String[] {"/"}));
 
         // Test with oidc_request_path parameter
         when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
@@ -1180,10 +1406,15 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
-        when(config.path()).thenReturn(new String[] {"/"});
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "callbackUri",
+                "http://redirect",
+                "pkceEnabled",
+                false,
+                "path",
+                new String[] {"/"}));
 
         // Test with invalid oidc_request_path parameter (absolute URL)
         when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
@@ -1220,10 +1451,15 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
-        when(config.path()).thenReturn(new String[] {"/"});
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "callbackUri",
+                "http://redirect",
+                "pkceEnabled",
+                false,
+                "path",
+                new String[] {"/"}));
 
         // Test with null oidc_request_path parameter - should fall back to requestURI
         when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
@@ -1265,10 +1501,15 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
-        when(config.path()).thenReturn(new String[] {"/"});
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "callbackUri",
+                "http://redirect",
+                "pkceEnabled",
+                false,
+                "path",
+                new String[] {"/"}));
 
         // Test with null oidc_request_path parameter - should fall back to requestURI
         when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
@@ -1311,11 +1552,17 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
-        when(config.path()).thenReturn(new String[] {"/"});
-        when(config.resource()).thenReturn(new String[] {"https://api.example.com"});
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "callbackUri",
+                "http://redirect",
+                "pkceEnabled",
+                false,
+                "path",
+                new String[] {"/"},
+                "resource",
+                new String[] {"https://api.example.com"}));
 
         when(request.getRequestURI()).thenReturn("/");
         MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
@@ -1351,11 +1598,17 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
-        when(config.path()).thenReturn(new String[] {"/"});
-        when(config.resource()).thenReturn(new String[] {"https://api1.example.com", "https://api2.example.com"});
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "callbackUri",
+                "http://redirect",
+                "pkceEnabled",
+                false,
+                "path",
+                new String[] {"/"},
+                "resource",
+                new String[] {"https://api1.example.com", "https://api2.example.com"}));
 
         when(request.getRequestURI()).thenReturn("/");
         MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
@@ -1394,50 +1647,17 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
-        when(config.path()).thenReturn(new String[] {"/"});
-        when(config.resource()).thenReturn(new String[] {});
-
-        when(request.getRequestURI()).thenReturn("/");
-        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
-
-        createOidcAuthenticationHandler();
-        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
-
-        // Verify that no resource parameter is present in the redirect URL
-        assertEquals(302, mockResponse.getStatus());
-        String location = mockResponse.getHeader("location");
-        assertFalse(
-                location.contains("resource="), "Expected no resource parameter in redirect URL but got: " + location);
-    }
-
-    @Test
-    void requestCredentialsWithNullResourceAttribute() {
-        // This is the class used by Sling to configure the Authentication Handler
-        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
-        String mockIdPUrl = "http://localhost:8080";
-        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
-        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
-        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
-                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
-        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
-
-        connections.add(new MockOidcConnection(
-                new String[] {"openid"},
+        config = createConfig(Map.of(
+                "defaultConnectionName",
                 MOCK_OIDC_PARAM,
-                "client-id",
-                "client-secret",
-                "http://localhost:8080",
-                new String[] {"access_type=offline"},
-                oidcProviderMetadataRegistry));
-
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
-        when(config.path()).thenReturn(new String[] {"/"});
-        when(config.resource()).thenReturn(null);
+                "callbackUri",
+                "http://redirect",
+                "pkceEnabled",
+                false,
+                "path",
+                new String[] {"/"},
+                "resource",
+                new String[] {}));
 
         when(request.getRequestURI()).thenReturn("/");
         MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
@@ -1472,12 +1692,18 @@ class OidcAuthenticationHandlerTest {
                 new String[] {"access_type=offline"},
                 oidcProviderMetadataRegistry));
 
-        when(config.defaultConnectionName()).thenReturn(MOCK_OIDC_PARAM);
-        when(config.callbackUri()).thenReturn("http://redirect");
-        when(config.pkceEnabled()).thenReturn(false);
-        when(config.path()).thenReturn(new String[] {"/"});
         // Array with empty strings and whitespace should be filtered out
-        when(config.resource()).thenReturn(new String[] {"", "  ", "https://api.example.com"});
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "callbackUri",
+                "http://redirect",
+                "pkceEnabled",
+                false,
+                "path",
+                new String[] {"/"},
+                "resource",
+                new String[] {"", "  ", "https://api.example.com"}));
 
         when(request.getRequestURI()).thenReturn("/");
         MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
@@ -1494,5 +1720,63 @@ class OidcAuthenticationHandlerTest {
         // Count occurrences of "resource=" - should be exactly 1
         int count = location.split("resource=", -1).length - 1;
         assertEquals(1, count, "Expected exactly one resource parameter but found " + count);
+    }
+
+    // ============================================
+    // Helper methods to reduce test duplication
+    // ============================================
+
+    /**
+     * Sets up a connection with logout endpoint for testing SP-initiated logout.
+     * Clears existing connections and adds a new MockOidcConnection with the provided endSessionUrl.
+     */
+    private void setupConnectionWithLogout(String endSessionUrl) {
+        connections.clear();
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "https://idp.example.com",
+                new String[0],
+                null,
+                endSessionUrl));
+    }
+
+    /**
+     * Sets up common request mocks for logout tests.
+     * @param scheme HTTP scheme (http or https)
+     * @param host Server hostname
+     * @param port Server port
+     * @param redirectParam Optional redirect parameter (can be null)
+     */
+    private void setupLogoutRequest(String scheme, String host, int port, String redirectParam) {
+        when(request.getScheme()).thenReturn(scheme);
+        when(request.getServerName()).thenReturn(host);
+        when(request.getServerPort()).thenReturn(port);
+        when(request.getContextPath()).thenReturn("");
+        if (redirectParam != null) {
+            when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn(redirectParam);
+        }
+    }
+
+    /**
+     * Verifies that the response redirects to the IdP end_session_endpoint with the expected post_logout_redirect_uri.
+     * @param expectedEndSessionUrl Expected IdP end_session endpoint URL
+     * @param expectedPostLogoutUriFragment Expected fragment in the post_logout_redirect_uri parameter (URL-encoded)
+     */
+    private void verifyIdpLogoutRedirect(String expectedEndSessionUrl, String expectedPostLogoutUriFragment)
+            throws IOException {
+        org.mockito.ArgumentCaptor<String> redirectCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(response).sendRedirect(redirectCaptor.capture());
+        String redirectUrl = redirectCaptor.getValue();
+        assertTrue(
+                redirectUrl.startsWith(expectedEndSessionUrl), "Redirect should go to IdP end_session: " + redirectUrl);
+        assertTrue(
+                redirectUrl.contains("post_logout_redirect_uri="),
+                "Redirect should contain post_logout_redirect_uri: " + redirectUrl);
+        assertTrue(
+                redirectUrl.contains(expectedPostLogoutUriFragment),
+                "post_logout_redirect_uri should contain expected fragment: " + redirectUrl);
     }
 }

@@ -61,6 +61,12 @@ public class OidcConnectionImpl implements ClientConnection {
 
         String[] additionalAuthorizationParameters();
 
+        @AttributeDefinition(
+                name = "End Session Endpoint",
+                description = "Optional OIDC end_session_endpoint URL for SP-initiated logout. When using baseUrl, "
+                        + "this is read from provider metadata.")
+        String endSessionEndpoint() default "";
+
         String webconsole_configurationFactory_nameHint() default
                 "Name: {name}, base URL: {baseUrl}, clientId: {clientId}";
     }
@@ -203,5 +209,30 @@ public class OidcConnectionImpl implements ClientConnection {
             return metadataRegistry.getIssuer(cfg.baseUrl());
         }
         return issuer;
+    }
+
+    /**
+     * Returns the OIDC end_session_endpoint URI for SP-initiated single logout, or null if not available.
+     */
+    @Nullable
+    URI endSessionEndpoint() {
+        if (hasBaseUrl && metadataRegistry != null) {
+            URI fromMetadata = metadataRegistry.getEndSessionEndpointURI(cfg.baseUrl());
+            if (fromMetadata != null) {
+                return fromMetadata;
+            }
+        }
+        String url = cfg.endSessionEndpoint();
+        if (url != null && !url.isEmpty()) {
+            try {
+                return URI.create(url);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalStateException(
+                        String.format(
+                                "Invalid end_session_endpoint URL configured: '%s'. Error: %s", url, e.getMessage()),
+                        e);
+            }
+        }
+        return null;
     }
 }

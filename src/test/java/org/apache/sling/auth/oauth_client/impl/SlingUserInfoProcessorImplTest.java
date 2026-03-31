@@ -351,4 +351,188 @@ class SlingUserInfoProcessorImplTest {
         groups.forEach(groupList::add);
         assertTrue(groupList.isEmpty(), "Expected no groups");
     }
+
+    // ========== Tests for ID token storage (storeIdToken) ==========
+
+    @Test
+    void testProcess_StoreIdToken_Success() throws Exception {
+        // Setup crypto service mock
+        when(cryptoService.encrypt(anyString())).thenReturn("encrypted-id-token");
+
+        // Setup config with storeIdToken enabled
+        SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
+                .convert(Map.of(
+                        "groupsInIdToken", false,
+                        "storeAccessToken", false,
+                        "storeRefreshToken", false,
+                        "storeIdToken", true,
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
+                .to(SlingUserInfoProcessorImpl.Config.class);
+
+        SlingUserInfoProcessorImpl testProcessor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
+
+        // Create token response with ID token
+        String idToken = createIdToken(TEST_SUBJECT);
+        String tokenResponse = createTokenResponseWithIdToken(TEST_ACCESS_TOKEN, TEST_REFRESH_TOKEN, idToken);
+
+        // Execute
+        OidcAuthCredentials result = testProcessor.process(null, tokenResponse, TEST_SUBJECT, TEST_IDP);
+
+        // Verify ID token was encrypted and stored
+        assertNotNull(result);
+        assertTrue(result.getAttributes().containsKey(OAuthTokenStore.PROPERTY_NAME_ID_TOKEN));
+        String storedToken = (String) result.getAttribute(OAuthTokenStore.PROPERTY_NAME_ID_TOKEN);
+        assertNotNull(storedToken);
+        assertEquals("encrypted-id-token", storedToken);
+        verify(cryptoService).encrypt(anyString());
+    }
+
+    @Test
+    void testProcess_StoreIdToken_NullIdToken() throws Exception {
+        // Setup config with storeIdToken enabled
+        SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
+                .convert(Map.of(
+                        "groupsInIdToken", false,
+                        "storeAccessToken", false,
+                        "storeRefreshToken", false,
+                        "storeIdToken", true,
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
+                .to(SlingUserInfoProcessorImpl.Config.class);
+
+        // Create mock crypto that can handle nulls
+        CryptoService mockCrypto = mock(CryptoService.class);
+        when(mockCrypto.encrypt(anyString())).thenAnswer(inv -> "encrypted-" + inv.getArgument(0));
+
+        SlingUserInfoProcessorImpl testProcessor = new SlingUserInfoProcessorImpl(mockCrypto, cfg);
+
+        // Create token response with null ID token (by using non-OIDC response)
+        String tokenResponse = createTokenResponse(TEST_ACCESS_TOKEN, TEST_REFRESH_TOKEN);
+
+        // Execute - should not throw exception
+        OidcAuthCredentials result = testProcessor.process(null, tokenResponse, TEST_SUBJECT, TEST_IDP);
+
+        // Verify result is returned but no ID token stored
+        assertNotNull(result);
+        assertFalse(result.getAttributes().containsKey(OAuthTokenStore.PROPERTY_NAME_ID_TOKEN));
+    }
+
+    @Test
+    void testProcess_StoreIdToken_EmptyIdToken() {
+        // Setup config with storeIdToken enabled
+        SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
+                .convert(Map.of(
+                        "groupsInIdToken", false,
+                        "storeAccessToken", false,
+                        "storeRefreshToken", false,
+                        "storeIdToken", true,
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
+                .to(SlingUserInfoProcessorImpl.Config.class);
+
+        SlingUserInfoProcessorImpl testProcessor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
+
+        // Create token response with empty ID token
+        String tokenResponse = createTokenResponseWithIdToken(TEST_ACCESS_TOKEN, TEST_REFRESH_TOKEN, "");
+
+        // Execute - should handle gracefully
+        OidcAuthCredentials result = testProcessor.process(null, tokenResponse, TEST_SUBJECT, TEST_IDP);
+
+        // Verify result is returned but no ID token stored
+        assertNotNull(result);
+        assertFalse(result.getAttributes().containsKey(OAuthTokenStore.PROPERTY_NAME_ID_TOKEN));
+    }
+
+    @Test
+    void testProcess_StoreIdToken_EncryptionException() throws Exception {
+        // Setup config with storeIdToken enabled
+        SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
+                .convert(Map.of(
+                        "groupsInIdToken", false,
+                        "storeAccessToken", false,
+                        "storeRefreshToken", false,
+                        "storeIdToken", true,
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
+                .to(SlingUserInfoProcessorImpl.Config.class);
+
+        // Create mock crypto that throws RuntimeException
+        CryptoService mockCrypto = mock(CryptoService.class);
+        when(mockCrypto.encrypt(anyString())).thenThrow(new RuntimeException("Encryption failed"));
+
+        SlingUserInfoProcessorImpl testProcessor = new SlingUserInfoProcessorImpl(mockCrypto, cfg);
+
+        // Create token response with ID token
+        String idToken = createIdToken(TEST_SUBJECT);
+        String tokenResponse = createTokenResponseWithIdToken(TEST_ACCESS_TOKEN, TEST_REFRESH_TOKEN, idToken);
+
+        // Execute - should handle exception gracefully
+        OidcAuthCredentials result = testProcessor.process(null, tokenResponse, TEST_SUBJECT, TEST_IDP);
+
+        // Verify result is returned but no ID token stored (encryption failed)
+        assertNotNull(result);
+        assertFalse(result.getAttributes().containsKey(OAuthTokenStore.PROPERTY_NAME_ID_TOKEN));
+    }
+
+    @Test
+    void testProcess_StoreIdToken_Disabled() throws Exception {
+        // Setup config with storeIdToken disabled
+        SlingUserInfoProcessorImpl.Config cfg = Converters.standardConverter()
+                .convert(Map.of(
+                        "groupsInIdToken", false,
+                        "storeAccessToken", false,
+                        "storeRefreshToken", false,
+                        "storeIdToken", false, // disabled
+                        "groupsClaimName", "groups",
+                        "connection", "test"))
+                .to(SlingUserInfoProcessorImpl.Config.class);
+
+        SlingUserInfoProcessorImpl testProcessor = new SlingUserInfoProcessorImpl(cryptoService, cfg);
+
+        // Create token response with ID token
+        String idToken = createIdToken(TEST_SUBJECT);
+        String tokenResponse = createTokenResponseWithIdToken(TEST_ACCESS_TOKEN, TEST_REFRESH_TOKEN, idToken);
+
+        // Execute
+        OidcAuthCredentials result = testProcessor.process(null, tokenResponse, TEST_SUBJECT, TEST_IDP);
+
+        // Verify ID token was NOT stored (disabled)
+        assertNotNull(result);
+        assertFalse(result.getAttributes().containsKey(OAuthTokenStore.PROPERTY_NAME_ID_TOKEN));
+    }
+
+    // Helper methods for ID token tests
+
+    private String createIdToken(String subject) throws Exception {
+        // Create a simple signed JWT for testing
+        JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+                .subject(subject)
+                .issuer("https://test-issuer.example.com")
+                .audience("test-client-id")
+                .expirationTime(new java.util.Date(System.currentTimeMillis() + 3600000))
+                .issueTime(new java.util.Date())
+                .build();
+
+        // Create signed JWT
+        SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claimsSet);
+
+        // Sign with a test secret
+        byte[] secret = "test-secret-key-for-signing-must-be-long".getBytes();
+        signedJWT.sign(new com.nimbusds.jose.crypto.MACSigner(secret));
+
+        return signedJWT.serialize();
+    }
+
+    private String createTokenResponseWithIdToken(String accessToken, String refreshToken, String idToken) {
+        JSONObject json = new JSONObject();
+        json.put("access_token", accessToken);
+        json.put("refresh_token", refreshToken);
+        json.put("token_type", "Bearer");
+        json.put("expires_in", 3600);
+        if (idToken != null && !idToken.isEmpty()) {
+            json.put("id_token", idToken);
+        }
+        return json.toJSONString();
+    }
 }

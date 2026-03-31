@@ -35,12 +35,7 @@ public interface UserInfoProcessor {
      * @param tokenResponse the token response received from the identity provider, must not be null. See: https://openid.net/specs/openid-connect-core-1_0.html#HybridTokenResponse
      * @param oidcSubject   the OIDC subject identifier as defined in ID Token, must not be null
      * @param idp           the identity provider identifier as defined in OidcAuthenticationHandler configuration, must not be null
-     * @param userInfo
-     * @param tokenResponse
-     * @param oidcSubject
-     * @param idp
      * @return the credentials to be returned by the authentication handler, must not be null
-     * @return
      */
     @NotNull
     OidcAuthCredentials process(

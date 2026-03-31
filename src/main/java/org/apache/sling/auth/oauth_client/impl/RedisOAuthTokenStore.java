@@ -46,6 +46,7 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
 
     private static final String KEY_SEGMENT_ACCESS_TOKEN = "access_token";
     private static final String KEY_SEGMENT_REFRESH_TOKEN = "refresh_token";
+    private static final String KEY_SEGMENT_ID_TOKEN = "id_token";
 
     private final JedisPool pool;
 
@@ -107,6 +108,7 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
                     tokens.expiresAt());
             if (tokens.refreshToken() != null)
                 jedis.set(keyFor(userId, connection, KEY_SEGMENT_REFRESH_TOKEN), tokens.refreshToken());
+            if (tokens.idToken() != null) jedis.set(keyFor(userId, connection, KEY_SEGMENT_ID_TOKEN), tokens.idToken());
         }
     }
 
@@ -117,6 +119,15 @@ public class RedisOAuthTokenStore implements OAuthTokenStore {
 
         try (Jedis jedis = pool.getResource()) {
             jedis.del(keyFor(userId, connection, KEY_SEGMENT_ACCESS_TOKEN));
+        }
+    }
+
+    @Override
+    public @Nullable String getIdToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver)
+            throws OAuthException {
+        String userId = resolver.getUserID();
+        try (Jedis jedis = pool.getResource()) {
+            return jedis.get(keyFor(userId, connection, KEY_SEGMENT_ID_TOKEN));
         }
     }
 

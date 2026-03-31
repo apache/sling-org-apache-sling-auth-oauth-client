@@ -21,6 +21,7 @@ package org.apache.sling.auth.oauth_client.impl;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.auth.oauth_client.ClientConnection;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 //
 // In terms of what typed objects we expose, there are a number of ways
@@ -45,6 +46,8 @@ public interface OAuthTokenStore {
 
     String PROPERTY_NAME_ACCESS_TOKEN = "access_token";
     String PROPERTY_NAME_REFRESH_TOKEN = "refresh_token";
+    String PROPERTY_NAME_ID_TOKEN = "id_token";
+    String PROFILE_PREFIX = "profile/";
 
     @NotNull
     OAuthToken getAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver)
@@ -60,4 +63,16 @@ public interface OAuthTokenStore {
 
     void clearAccessToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver)
             throws OAuthException;
+
+    /**
+     * Retrieves the ID token for the current user.
+     * This is primarily used during logout operations to read the id_token for OIDC RP-Initiated Logout.
+     *
+     * @param connection the client connection
+     * @param resolver the resource resolver for the current user
+     * @return the decrypted ID token, or null if not found or decryption fails
+     * @throws OAuthException if there is an error accessing the repository
+     */
+    @Nullable
+    String getIdToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver) throws OAuthException;
 }

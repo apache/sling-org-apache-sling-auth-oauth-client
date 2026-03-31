@@ -30,6 +30,7 @@ import org.apache.sling.auth.oauth_client.impl.OAuthTokenStore;
 import org.apache.sling.auth.oauth_client.impl.OAuthTokens;
 import org.apache.sling.auth.oauth_client.impl.TokenState;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * In-memory, volatile token store implementation
@@ -148,6 +149,14 @@ public class InMemoryOAuthTokenStore implements OAuthTokenStore {
         } else if (value != null) {
             storage.remove(key);
         }
+    }
+
+    @Override
+    public @Nullable String getIdToken(@NotNull ClientConnection connection, @NotNull ResourceResolver resolver)
+            throws OAuthException {
+        Value value = storage.get(new Key(connection.name(), resolver.getUserID()));
+        if (value == null) return null;
+        return value.tokens().idToken();
     }
 
     public Stream<OAuthTokens> allTokens() {

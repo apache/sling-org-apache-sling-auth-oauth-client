@@ -30,6 +30,7 @@ class ResolvedOidcConnection extends ResolvedConnection {
 
     private final URI jwkSetURL;
     private final String issuer;
+    private final URI endSessionEndpoint;
 
     /**
      * Constructs a resolved OIDC connection with all parameters materialised.
@@ -43,6 +44,7 @@ class ResolvedOidcConnection extends ResolvedConnection {
      * @param additionalAuthorizationParameters additional authorization parameters
      * @param jwkSetURL the JWK Set URL, may be null
      * @param issuer the issuer URL
+     * @param endSessionEndpoint the end_session endpoint URL for logout, may be null
      */
     private ResolvedOidcConnection(
             @NotNull String name,
@@ -53,7 +55,8 @@ class ResolvedOidcConnection extends ResolvedConnection {
             @NotNull List<String> scopes,
             @NotNull List<String> additionalAuthorizationParameters,
             @Nullable URI jwkSetURL,
-            @NotNull String issuer) {
+            @NotNull String issuer,
+            @Nullable URI endSessionEndpoint) {
         super(
                 name,
                 authorizationEndpoint,
@@ -64,6 +67,7 @@ class ResolvedOidcConnection extends ResolvedConnection {
                 additionalAuthorizationParameters);
         this.jwkSetURL = jwkSetURL;
         this.issuer = issuer;
+        this.endSessionEndpoint = endSessionEndpoint;
     }
 
     @Nullable
@@ -74,6 +78,14 @@ class ResolvedOidcConnection extends ResolvedConnection {
     @NotNull
     String issuer() {
         return issuer;
+    }
+
+    /**
+     * Returns the OIDC end_session_endpoint URI for SP-initiated single logout, or null if not available.
+     */
+    @Nullable
+    URI endSessionEndpoint() {
+        return endSessionEndpoint;
     }
 
     static @NotNull ResolvedConnection resolve(@NotNull ClientConnection connection) {
@@ -88,7 +100,8 @@ class ResolvedOidcConnection extends ResolvedConnection {
                     Arrays.asList(impl.scopes()),
                     Arrays.asList(impl.additionalAuthorizationParameters()),
                     impl.jwkSetURL(),
-                    impl.issuer());
+                    impl.issuer(),
+                    impl.endSessionEndpoint());
         }
         throw new IllegalArgumentException(String.format(
                 "Unable to resolve %s (name=%s) of type %s",
