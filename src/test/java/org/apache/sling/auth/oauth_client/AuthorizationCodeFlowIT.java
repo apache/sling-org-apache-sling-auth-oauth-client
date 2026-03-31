@@ -223,6 +223,10 @@ class AuthorizationCodeFlowIT {
                         CRYPTO_SERVICE_PID,
                         Map.of("algorithm", "PBEWITHHMACSHA512ANDAES_256", "names", "sling-oauth")));
 
+        // configure token store
+        configPidsToCleanup.add(sling.adaptTo(OsgiConsoleClient.class)
+                .editConfiguration(JcrUserHomeOAuthTokenStore.class.getName(), null, Map.of("unused", "unused")));
+
         String oidcConnectionName = "keycloak";
 
         // configure connection to keycloak
