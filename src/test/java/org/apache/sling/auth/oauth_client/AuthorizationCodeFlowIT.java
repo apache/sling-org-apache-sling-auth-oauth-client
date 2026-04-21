@@ -70,6 +70,7 @@ import org.apache.sling.testing.clients.SlingClient;
 import org.apache.sling.testing.clients.SlingHttpResponse;
 import org.apache.sling.testing.clients.osgi.OsgiConsoleClient;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -127,10 +128,16 @@ class AuthorizationCodeFlowIT {
         // this is most usually done in an IDE, with both Keycloak and Sling running
         String existingKeyCloakUrl = System.getenv("KEYCLOAK_URL");
         if (existingKeyCloakUrl == null) {
-            keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:26.4")
-                    .withRealmImportFile("keycloak-import/sling.json");
-            keycloak.start();
-            keycloakPort = keycloak.getHttpPort();
+            try {
+                keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:26.4")
+                        .withRealmImportFile("keycloak-import/sling.json");
+                keycloak.start();
+                keycloakPort = keycloak.getHttpPort();
+            } catch (RuntimeException e) {
+                Assumptions.assumeTrue(
+                        false,
+                        "Skipping integration test: Keycloak test container is unavailable (" + e.getMessage() + ")");
+            }
         } else {
             keycloakPort = URI.create(existingKeyCloakUrl).getPort();
         }
@@ -163,6 +170,7 @@ class AuthorizationCodeFlowIT {
 
     @AfterEach
     void cleanupOsgiConfigs() throws ClientException {
+        if (sling == null) return;
 
         // the Sling testing clients do not offer a way of listing configurations, as assigned PIDs
         // are not predictable. So instead of running deleting test configs when the test starts
@@ -173,6 +181,7 @@ class AuthorizationCodeFlowIT {
 
     @AfterEach
     void uninstallBundle() throws ClientException {
+        if (sling == null) return;
         supportBundle.uninstall(sling.adaptTo(OsgiConsoleClient.class));
     }
 
