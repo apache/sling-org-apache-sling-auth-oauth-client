@@ -1,3 +1,5 @@
 # Make Jedis imports optional, the bundle can work with JCR persistence only
-Import-Package: redis.clients.jedis;resolution:=optional, \
+# Widen slf4j import range to support both 1.7.x (Sling Starter 13) and 2.x
+Import-Package: org.slf4j;version="[1.7,3)", \
+    redis.clients.jedis;resolution:=optional, \
     *;
