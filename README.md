@@ -5,108 +5,127 @@
 # Apache Sling OAuth 2.0 client with OIDC support
 
 > [!IMPORTANT]
-> The Java APIs exported by this bundle are considered **experimental** and are marked as being
-> @ProviderType. The APIs may change in an incompatible way in future minor releases.
+> The Java APIs exported by this bundle are considered **experimental** and are marked as
+> `@ProviderType`. The APIs may change in an incompatible way in future minor releases.
 
-This bundle adds support for Sling-based applications to function as an OAuth 2.0 client 
-([RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749)) and implements the basis for being an 
-[Open ID connect](https://openid.net/developers/how-connect-works/) relying party.
+This bundle adds support for Sling-based applications to function as an OAuth 2.0 client
+([RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749)) and as an
+[OpenID Connect](https://openid.net/developers/how-connect-works/) relying party.
 
-Its main objective is to simplify access to id and access tokens in a secure manner. It currently supports
-the authentication code flow based on OIDC and OAuth 2.0 .
+It focuses on secure access to OAuth/OIDC tokens and supports authorization code flow for both OAuth 2.0 and OIDC.
+
+## Build and test
+
+- Build bundle and run tests: `mvn clean install`
+- Unit tests only: `mvn test`
+- Full build including integration tests: `mvn verify`
+- Skip integration tests: `mvn install -DskipITs`
+- Disable Keycloak-based ITs explicitly: `mvn verify -Dit.keycloak.enabled=false`
 
 ## Usage
 
 ### Models and other Java APIs
 
 The `OAuthTokenAccess` OSGi service exposes methods to retrieve and clear access tokens. These methods encapsulate
-persistence concerns and handle refresh tokens transparently, if present.
+persistence concerns and handle refresh tokens transparently, when present.
 
 ```java
 @Model(adaptables = SlingHttpServletRequest.class)
 public class MyModel {
-    
+
     @SlingObject private SlingHttpServletRequest request;
-    
+
     @OSGiService(filter = "(name=foo)") private ClientConnection connection;
-    
+
     @OSGiService private OAuthTokenAccess tokenAccess;
 
     private OAuthTokenResponse tokenResponse;
-    
+
     @PostConstruct
     public void initToken() {
         tokenResponse = tokenAccess.getAccessToken(connection, request, request.getRequestURI());
     }
-    
+
     public MyView getResponse() {
-        if ( tokenResponse.hasValidToken() ) {
+        if (tokenResponse.hasValidToken()) {
             return doQuery(tokenResponse.getTokenValue());
         }
-        
         return null;
     }
-    
+
     public String getRedirectLink() {
-        if ( !tokenResponse.hasValidToken() ) {
+        if (!tokenResponse.hasValidToken()) {
             return tokenResponse.getRedirectUri().toString();
         }
-        
         return null;
     }
 }
-
 ```
 
 ### Servlets
 
-The bundle exposes an abstract `OAuthEnabledSlingServlet` that contains the boilerplate code needed
-to obtain a valid OAuth 2 access token.
-
-Basic usage is as follows
+The bundle exposes an abstract `OAuthEnabledSlingServlet` that handles token retrieval/refresh and redirects to the OAuth/OIDC flow when needed.
 
 ```java
+import java.io.IOException;
+import javax.servlet.Servlet;
+import javax.servlet.ServletException;
 
-import org.apache.sling.auth.oauth_client.*;
+import org.apache.sling.api.SlingHttpServletRequest;
+import org.apache.sling.api.SlingHttpServletResponse;
+import org.apache.sling.auth.oauth_client.ClientConnection;
+import org.apache.sling.auth.oauth_client.OAuthTokenAccess;
+import org.apache.sling.auth.oauth_client.support.OAuthEnabledSlingServlet;
+import org.apache.sling.servlets.annotations.SlingServletPaths;
+import org.jetbrains.annotations.NotNull;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 
-@Component(service = { Servlet.class })
-@SlingServletPaths(value = "/bin/myservlet")
+@Component(service = Servlet.class)
+@SlingServletPaths("/bin/myservlet")
 public class MySlingServlet extends OAuthEnabledSlingServlet {
 
     private final MyRemoteService svc;
-   
+
     @Activate
-    public MySlingServlet(@Reference OidcConnection connection, 
-        @Reference OAuthTokenAccess tokenAccess,
-        @Reference MyRemoteService svc) {
+    public MySlingServlet(
+            @Reference ClientConnection connection,
+            @Reference OAuthTokenAccess tokenAccess,
+            @Reference MyRemoteService svc) {
         super(connection, tokenAccess);
         this.svc = svc;
     }
 
     @Override
-    protected void doGetWithToken(@NotNull SlingHttpServletRequest request, @NotNull SlingHttpServletResponse response,
-            OAuthToken token) throws IOException, ServletException {
-
-        this.svc.query("my-query", token.getValue()).writeResponseTo(response.getOutputStream());
+    protected void doGetWithToken(
+            @NotNull SlingHttpServletRequest request,
+            @NotNull SlingHttpServletResponse response,
+            String accessToken) throws IOException, ServletException {
+        this.svc.query("my-query", accessToken).writeResponseTo(response.getOutputStream());
     }
 }
 ```
 
+### OIDC authentication handler
+
+This bundle also ships `OidcAuthenticationHandler` for Sling Auth Core integration.
+
+Notable capabilities:
+
+- `redirect` request parameter support to return users to a specific local path after authentication
+- Resource Indicators support (`resource`) for RFC 8707
+- Configurable max age for the transient `sling.oauth-request-key` cookie (`requestKeyCookieMaxAgeSeconds`)
+- Optional SP-initiated logout support (`enableSPInitiatedSingleLogout`) with host allow-list enforcement (`logoutRedirectAllowedHosts`)
 
 ### Clearing access tokens
 
-If an access token response contains an expiry date the bundle will make sure that it is not
-accessible via APIs. This will not cover all scenarios because access tokens can expire or be
-invalidated out of band.
+If an access token response contains an expiry date, the bundle makes sure expired tokens are not returned by APIs.
+This does not cover out-of-band invalidation at the provider, so clients still need provider-specific invalid-token handling.
 
-The client will need to determine if the access token is invalid as this is a provider-specific
-check.
+#### When the request/response are available
 
-#### When the request and response are available
-
-This method is generally recommended as it permits the generation of a redirect URI that will kick
-off a new OAuth authorisation flow.
-
+This is generally recommended because it can return a redirect URI that starts a new OAuth authorization flow.
 
 ```java
 @Model(adaptables = SlingHttpServletRequest.class)
@@ -114,49 +133,43 @@ public class MySlingModel {
     @OSGiService private OAuthTokenAccess tokenAccess;
     @SlingObject SlingHttpServletRequest request;
     @OSGiService(filter = "(name=foo)") private ClientConnection connection;
-    
+
     public String getLink() {
         // code elided
-        if ( accessTokenIsInvalid() ) {
+        if (accessTokenIsInvalid()) {
             OAuthTokenResponse response = tokenAccess.clearAccessToken(connection, request, request.getRequestURI());
             return response.getRedirectUri().toString();
         }
+        return null;
     }
 }
 ```
 
+#### When request/response are not available
 
-#### When the request and response are not available
-
-
-This approach should be used when invalidating access tokens without user interaction, as it does not
-provide a mechanism to generate a redirect URL for restarting the OAuth authorisation flow and obtaining
-a new access token.
+Use this for background or non-interactive invalidation where no redirect URI is needed.
 
 ```java
 @Component
 public class MyComponent {
     @Reference private OAuthTokenAccess tokenAccess;
-    
-    public void execute(@Reference OidcConnection connection, ResourceResolver resolver) {
+
+    public void execute(@Reference ClientConnection connection, ResourceResolver resolver) {
         // code elided
-        if ( accessTokenIsInvalid() ) {
+        if (accessTokenIsInvalid()) {
             tokenAccess.clearAccessToken(connection, resolver);
         }
     }
 }
 ```
 
+#### When extending `OAuthEnabledSlingServlet`
 
-
-#### When extending OAuthEnabledSlingServlet
-
-For classes that extend from the `OAuthEnabledSlingServlet` the `isInvalidAccessTokenException` method can be
-overriden. If this method returns true, the access token is cleared and a new OAuth flow is started.
+For subclasses of `OAuthEnabledSlingServlet`, override `isInvalidAccessTokenException`. If it returns `true`, the token is cleared and a new OAuth flow starts.
 
 ```java
-@Component(service = { Servlet.class })
-@SlingServletPaths(value = "/bin/myservlet")
+@Component(service = Servlet.class)
+@SlingServletPaths("/bin/myservlet")
 public class MySlingServlet extends OAuthEnabledSlingServlet {
 
     // other methods elided
@@ -168,68 +181,67 @@ public class MySlingServlet extends OAuthEnabledSlingServlet {
 }
 ```
 
-
 ### Error handling
 
-The top-level servlets used for the OAuth flow will validate parameters that are expected to be
-sent by the client and return a status code of 400 in case the parameters are missing or invalid.
+Top-level OAuth servlets validate required parameters and return HTTP 400 for missing/invalid inputs.
 
-For others problems related to the OAuth flow these servlets throw specific subclasses of ServletException.
-The exceptions will return generic messages that can be displayed directly to the user and store
-the actual cause in nested exception so that it is logged.
-
-These exceptions are:
+For other OAuth flow problems, these servlets throw specific `ServletException` subclasses with user-safe messages and nested root causes for logging:
 
 - `org.apache.sling.auth.oauth_client.impl.OAuthCallbackException`
 - `org.apache.sling.auth.oauth_client.impl.OAuthEntryPointException`
 - `org.apache.sling.auth.oauth_client.impl.OAuthFlowException` (superclass)
 
-It is recommended that applications install specific error handlers for these exceptions. See the
-[Apache Sling error handling documentation](https://sling.apache.org/documentation/the-sling-engine/errorhandling.html)
-for more details.
+It is recommended to install dedicated error handlers for these exceptions. See
+[Apache Sling error handling documentation](https://sling.apache.org/documentation/the-sling-engine/errorhandling.html).
 
 ### Client registration
 
-Client registration is specific to each provider. When registering, note the following:
+Client registration is provider-specific. At minimum:
 
-- the redirect URL must be set to $HOST/system/sling/oauth/callback registered. For development this is typically http://localhost:8080/system/sling/oauth/callback
-- write down the client id, client secret obtained from the OIDC provider
-- you may need to provide in advance the set of scopes accessible to your client
+- Register callback URL as `$HOST/system/sling/oauth/callback` (for local development typically `http://localhost:8080/system/sling/oauth/callback`)
+- Capture provider client ID and client secret
+- Define scopes your application needs
 
-Validated providers:
+Validated providers include:
 
-- Google, OIDC, with base URL of https://accounts.google.com , see [Google OIDC documentation](https://developers.google.com/identity/protocols/oauth2/openid-connect)
-- GitHub, OAuth 2.0, with authorizationEndpoint https://github.com/login/oauth/authorize and tokenEndpoint https://github.com/login/oauth/access_token
-- KeyCloak ( see [Keycloak](#keycloak) )
-- Microsoft, OIDC, with base URL of https://login.microsoftonline.com/$TENANT\_ID/v2.0. see [Microsoft OIDC documentation](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-protocols-oidc)
-- Adobe IMS, OAuth 2.0, with authorizationEndpoint https://ims-na1.adobelogin.com/ims/authorize/v3 and tokenEndpoint https://ims-na1.adobelogin.com/ims/token/v1
+- Google (OIDC) via `https://accounts.google.com`
+- GitHub (OAuth 2.0) via `https://github.com/login/oauth/authorize` and `https://github.com/login/oauth/access_token`
+- Keycloak
+- Microsoft (OIDC) via `https://login.microsoftonline.com/$TENANT_ID/v2.0`
+- Adobe IMS (OAuth 2.0) via `https://ims-na1.adobelogin.com/ims/authorize/v3` and `https://ims-na1.adobelogin.com/ims/token/v1`
 
-### Deployment
+## Deployment
 
-A set of dependencies required by this bundle, on top of the Sling Starter ones, is available at `src/main/features/main.json`.
-For the tokens to be stored in Redis ( see [Redis storage](#redis-storage) ) an additional feature with dependencies is found at `src/main/features/redis.json`. 
+Base bundle dependencies (on top of Sling Starter) are defined in `src/main/features/main.json`.
+Additional dependencies for Redis token storage are in `src/main/features/redis.json`.
 
-Since the bundle relies on encryption to create and validate the OAuth 2.0 `state` parameter, a `CryptoService` must be configured
+### CryptoService configuration
+
+Because OAuth state values are encrypted/signed, `CryptoService` must be configured:
 
 ```json
-    "org.apache.sling.commons.crypto.internal.FilePasswordProvider~oauth": {
-        "path": "secrets/encrypt/password",
-        "fix.posixNewline": true
-    },
-    "org.apache.sling.commons.crypto.jasypt.internal.JasyptRandomIvGeneratorRegistrar~oauth": {
-       "algorithm": "SHA1PRNG"
-    },
-    "org.apache.sling.commons.crypto.jasypt.internal.JasyptStandardPbeStringCryptoService~oauth": {
-       "names": [ "sling-oauth" ],
-       "algorithm": "PBEWITHHMACSHA512ANDAES_256"
-    }
+"org.apache.sling.commons.crypto.internal.FilePasswordProvider~oauth": {
+    "path": "secrets/encrypt/password",
+    "fix.posixNewline": true
+},
+"org.apache.sling.commons.crypto.jasypt.internal.JasyptRandomIvGeneratorRegistrar~oauth": {
+    "algorithm": "SHA1PRNG"
+},
+"org.apache.sling.commons.crypto.jasypt.internal.JasyptStandardPbeStringCryptoService~oauth": {
+    "names": ["sling-oauth"],
+    "algorithm": "PBEWITHHMACSHA512ANDAES_256"
+}
 ```
 
-The _sling-oauth_ names property is important since it is used to select the CryptoService used by this bundle.
+The `sling-oauth` name is required because this bundle selects the crypto service by that name.
 
-In addition, one of the following types of OSGi configuration must be added:
+### Client connection configuration
 
-#### OIDC variant
+Configure one (or more) client connections:
+
+#### OIDC variant (`OidcConnectionImpl`)
+
+You can configure OIDC either with `baseUrl` metadata discovery **or** by explicitly setting all endpoints (`authorizationEndpoint`, `tokenEndpoint`, `userInfoUrl`, `jwkSetURL`, `issuer`).
 
 ```json
 "org.apache.sling.auth.oauth_client.impl.OidcConnectionImpl~provider": {
@@ -237,139 +249,93 @@ In addition, one of the following types of OSGi configuration must be added:
     "baseUrl": "https://example.com",
     "clientId": "$[secret:provider/clientId]",
     "clientSecret": "$[secret:provider/clientSecret]",
-    "scopes": ["openid"]
+    "scopes": ["openid"],
+    "additionalAuthorizationParameters": ["prompt=consent"]
 }
 ```
 
-#### OAuth variant
+For SP-initiated logout, `endSessionEndpoint` can also be configured (or discovered from OIDC metadata when available).
+
+#### OAuth variant (`OAuthConnectionImpl`)
 
 ```json
-"org.apache.sling.auth.oauth_client.impl.OAuthConnectionImpl~github": {
+"org.apache.sling.auth.oauth_client.impl.OAuthConnectionImpl~provider": {
     "name": "provider",
     "authorizationEndpoint": "https://example.com/login/oauth/authorize",
     "tokenEndpoint": "https://example.com/login/oauth/access_token",
     "clientId": "$[secret:provider/clientId]",
     "clientSecret": "$[secret:provider/clientSecret]",
-    "scopes": ["user:email"]
+    "scopes": ["user:email"],
+    "additionalAuthorizationParameters": ["allow_signup=false"]
 }
 ```
 
-At this point, the OAuth process can be kicked of by navigating to http://localhost:8080/system/sling/oauth/entry-point?c=provider
+Start the OAuth entry-point flow at:
 
-### Token storage
+`http://localhost:8080/system/sling/oauth/entry-point?c=provider`
 
-The tokens can be stored either in the JCR repository, under the user's home, or in Redis. A configuration is required to select a provider.
+### OIDC Authentication Handler configuration (optional)
 
-#### JCR Storage
-
-The tokens are stored under the user's home, under the `oauth-tokens/$PROVIDER_NAME` node.
+If you use `OidcAuthenticationHandler` as your auth mechanism, configure at least:
 
 ```json
-"org.apache.sling.auth.oauth_client.impl.JcrUserHomeOAuthTokenStore" : {
+"org.apache.sling.auth.oauth_client.impl.OidcAuthenticationHandler~provider": {
+    "path": ["/"],
+    "idp": "oidc",
+    "callbackUri": "http://localhost:8080/system/sling/oauth/callback",
+    "defaultConnectionName": "provider",
+    "pkceEnabled": true,
+    "userInfoEnabled": true,
+    "resource": ["https://api.example.com"],
+    "requestKeyCookieMaxAgeSeconds": 300,
+    "enableSPInitiatedSingleLogout": false,
+    "logoutRedirectPath": "/",
+    "logoutRedirectAllowedHosts": ["localhost"]
 }
 ```
 
-#### Redis storage
+When `enableSPInitiatedSingleLogout=true`, `logoutRedirectAllowedHosts` is mandatory for open-redirect protection.
+
+## Token storage
+
+Tokens can be stored in JCR (under user home) or Redis.
+
+### JCR storage
+
+Tokens are stored at `oauth-tokens/$PROVIDER_NAME` under the user home.
 
 ```json
-"org.apache.sling.auth.oauth_client.impl.RedisOAuthTokenStore" : {
+"org.apache.sling.auth.oauth_client.impl.JcrUserHomeOAuthTokenStore": {}
+```
+
+### Redis storage
+
+```json
+"org.apache.sling.auth.oauth_client.impl.RedisOAuthTokenStore": {
     "redisUrl": "redis://localhost:6379"
 }
 ```
 
 ## Local development setup
 
-### tl;dr
+### Quickstart
 
-- run the keycloak container using the instructions for 'use existing test files'
-- build the bundle once with `mvn clean install`
-- run Sling with `mvn feature-launcher:start feature-launcher:stop -Dfeature-launcher.waitForInput`
-- create OSGi config with 
+1. Start Keycloak with the prebuilt test realm:
+   - `make keycloak-run-import`
+2. Build once:
+   - `mvn clean install -DskipITs`
+3. Start Sling:
+   - `mvn feature-launcher:start feature-launcher:stop -Dfeature-launcher.waitForInput`
+4. Create OIDC connection config in Sling:
+   - `make sling-create-config`
 
-```
-export CLIENT_SECRET=$(cat src/test/resources/keycloak-import/sling.json | jq --raw-output '.clients[] | select (.clientId == "oidc-test") | .secret')
+Then:
 
-$ curl -u admin:admin -X POST -d "apply=true" -d "propertylist=name,baseUrl,clientId,clientSecret,scopes" \
-    -d "name=keycloak-dev" \
-    -d "baseUrl=http://localhost:8081/realms/sling" \
-    -d "clientId=oidc-test"\
-    -d "clientSecret=$CLIENT_SECRET" \
-    -d "scopes=openid" \
-    -d "factoryPid=org.apache.sling.auth.oauth_client.impl.OidcConnectionImpl" \
-    http://localhost:8080/system/console/configMgr/org.apache.sling.auth.oauth_client.impl.OidcConnectionImpl~keycloak-dev
-```
+- Keycloak: `http://localhost:8081`
+- Sling: `http://localhost:8080`
+- OAuth entry point: `http://localhost:8080/system/sling/oauth/entry-point?c=keycloak-dev`
 
-Now you can 
+### Integration test notes
 
-- access KeyCloak on http://localhost:8081 
-- access Sling on http://localhost:8080
-- start the login process on http://localhost:8080/system/sling/oauth/entry-point?c=keycloak-dev
-
-### Keycloak
-
-#### Use existing test files
-
-Note that this imports the test setup with a single user with a _redirect_uri_ set to _http://localhost*_, which can be a security issue.
-If you plan to export the configuration, store the keycloak database in a volume. In the following examples we will use the directory `keycloak-data` for the h2 database
-and for the export directory.
-
-```
-$ mkdir -p keycloak-data/h2
-$ docker run --rm  --volume $(pwd)/src/test/resources/keycloak-import:/opt/keycloak/data/import --volume $(pwd)/keycloak-data/h2:/opt/keycloak/data/h2 -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0.3 start-dev --import-realm
-```
-
-#### Manual setup
-
-1. Launch Keycloak locally
-
-```
-$ docker run --rm --volume $(pwd)/keycloak-data:/opt/keycloak/data -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0.3 start-dev
-```
-
-2. Create test realm
-
-- access http://localhost:8081/
-- go to 'Administration Console'
-- login with admin:admin
-- open dropdown from the top left and press 'Create realm'
-- Select the name 'sling' and create it
-
-3. Create client
-
-- in the left navigation area, press 'clients'
-- press 'Create client'
-- Fill in 'Client ID' as 'oidc-test' and press 'Next'
-- Enable 'Client authentication' and press 'Save'
-
-4. Configure clients
-
-- in the client details page, set the valid redirect URIs to http://localhost:8080/system/sling/oauth/callback and save
-- navigate to the 'Credentials' tab and copy the Client secret
-
-5. Add users
-
-- in the left navigation area, press 'users'
-- press 'create new user'
-- fill in username: test and press 'create'
-- go to the 'details' tab, clear any required user actions and press 'save'
-- go to the 'credentials' tab and press 'set password'
-- in the dialog, use 'test' for the password and password confirmation fields and then press 'save'
-- confirm by pressing 'save password' in the new dialog
-
-
-### Exporting the test realm
-
-Create a directory to store the exported realm
-```
-mkdir -p $(pwd)/keycloak-data/export
-```
-Export the realm:
-```
-$ docker run --rm  --volume $(pwd)/src/test/resources/keycloak-import:/opt/keycloak/data/import --volume $(pwd)/keycloak-data/h2:/opt/keycloak/data/h2 --volume $(pwd)/keycloak-data/export:/opt/keycloak/data/export -p 8082:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0.3 export --realm sling --users realm_file --file /opt/keycloak/data/export/sling.json
-```
-
-### Future plans
-
-- explore an AuthenticationHandler that can optionally expose the access tokens
-- investigate PKCE (RFC 7636)
-- investigate encrypted client-side storage of tokens
+- Integration tests use Testcontainers (Keycloak + Redis) and require Docker.
+- To skip only Keycloak-based integration tests, use `-Dit.keycloak.enabled=false`.
