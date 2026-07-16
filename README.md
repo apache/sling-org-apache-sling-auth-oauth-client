@@ -18,9 +18,31 @@ It focuses on secure access to OAuth/OIDC tokens and supports authorization code
 
 - Build bundle and run tests: `mvn clean install`
 - Unit tests only: `mvn test`
-- Full build including integration tests: `mvn verify`
+- Full build including integration tests (Docker required): `mvn verify`
 - Skip integration tests: `mvn install -DskipITs`
 - Disable Keycloak-based ITs explicitly: `mvn verify -Dit.keycloak.enabled=false`
+- Run one unit test class: `mvn test -Dtest=OidcConnectionImplTest`
+- Run one integration test: `mvn verify -Dit=AuthorizationCodeFlowIT`
+
+## Project layout
+
+```text
+src/
+  main/
+    features/
+      main.json          # Base feature model
+      redis.json         # Optional Redis token store feature overlay
+    java/
+      org/apache/sling/auth/oauth_client/
+        *.java           # Public API
+        impl/            # OSGi DS components (internal)
+        spi/             # Extension points for auth integration
+        support/         # Consumer helper base classes
+  test/
+    java/
+    resources/
+      keycloak-import/   # Local dev / IT realm data
+```
 
 ## Usage
 
@@ -116,6 +138,7 @@ Notable capabilities:
 - `redirect` request parameter support to return users to a specific local path after authentication
 - Resource Indicators support (`resource`) for RFC 8707
 - Configurable max age for the transient `sling.oauth-request-key` cookie (`requestKeyCookieMaxAgeSeconds`)
+- Optional PKCE support (`pkceEnabled`)
 - Optional SP-initiated logout support (`enableSPInitiatedSingleLogout`) with host allow-list enforcement (`logoutRedirectAllowedHosts`)
 
 ### Clearing access tokens
@@ -215,6 +238,8 @@ Validated providers include:
 Base bundle dependencies (on top of Sling Starter) are defined in `src/main/features/main.json`.
 Additional dependencies for Redis token storage are in `src/main/features/redis.json`.
 
+Redis support is optional at runtime (`redis.clients.jedis` is imported as optional), so the bundle also works without Redis on the classpath.
+
 ### CryptoService configuration
 
 Because OAuth state values are encrypted/signed, `CryptoService` must be configured:
@@ -241,7 +266,7 @@ Configure one (or more) client connections:
 
 #### OIDC variant (`OidcConnectionImpl`)
 
-You can configure OIDC either with `baseUrl` metadata discovery **or** by explicitly setting all endpoints (`authorizationEndpoint`, `tokenEndpoint`, `userInfoUrl`, `jwkSetURL`, `issuer`).
+Configure OIDC either with `baseUrl` metadata discovery **or** by explicitly setting all endpoints (`authorizationEndpoint`, `tokenEndpoint`, `userInfoUrl`, `jwkSetURL`, `issuer`) — but not both.
 
 ```json
 "org.apache.sling.auth.oauth_client.impl.OidcConnectionImpl~provider": {
@@ -326,6 +351,7 @@ Tokens are stored at `oauth-tokens/$PROVIDER_NAME` under the user home.
    - `mvn clean install -DskipITs`
 3. Start Sling:
    - `mvn feature-launcher:start feature-launcher:stop -Dfeature-launcher.waitForInput`
+   - or `make sling-run`
 4. Create OIDC connection config in Sling:
    - `make sling-create-config`
 
@@ -339,3 +365,8 @@ Then:
 
 - Integration tests use Testcontainers (Keycloak + Redis) and require Docker.
 - To skip only Keycloak-based integration tests, use `-Dit.keycloak.enabled=false`.
+
+## Security
+
+The project threat model is documented at
+https://github.com/apache/sling/blob/master/docs/threat-model.md .
