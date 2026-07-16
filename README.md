@@ -40,6 +40,7 @@ src/
         support/         # Consumer helper base classes
   test/
     java/
+      .../itbundle/      # IT-only support bundle generation/install helpers
     resources/
       keycloak-import/   # Local dev / IT realm data
 ```
@@ -364,7 +365,11 @@ Then:
 ### Integration test notes
 
 - Integration tests use Testcontainers (Keycloak + Redis) and require Docker.
+- During ITs, Sling runs on a reserved random port (`http.port`) to avoid collisions; do not assume `8080`.
+- Use `-Dit.startTimeoutSeconds=60` (default) to control Sling startup wait in ITs.
+- You can reuse an already running Keycloak by setting `KEYCLOAK_URL` instead of starting a Testcontainers Keycloak.
 - To skip only Keycloak-based integration tests, use `-Dit.keycloak.enabled=false`.
+- Note: ITs use Keycloak `quay.io/keycloak/keycloak:26.4`, while `make keycloak-run-import` uses `quay.io/keycloak/keycloak:20.0.3` for local manual setup.
 
 ## Security
 

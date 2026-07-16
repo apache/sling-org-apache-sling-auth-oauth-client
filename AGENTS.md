@@ -2,6 +2,10 @@
 
 Apache Sling OAuth Client (`org.apache.sling.auth.oauth-client`) is an OSGi bundle that adds OAuth 2.0 authorization-code flow and OpenID Connect (OIDC) authentication to Apache Sling. It ships entry-point and callback servlets, pluggable token stores (in-memory, JCR, Redis), an OIDC authentication handler, and a public API/SPI for downstream bundles. Packaged with the Sling Feature Model and built against Sling Starter 13 features.
 
+It supports both:
+- OIDC client connections (`OidcConnectionImpl`, metadata-based or explicit endpoint config)
+- OAuth 2.0 client connections (`OAuthConnectionImpl`, explicit endpoint config)
+
 > [!IMPORTANT]
 > The exported Java APIs are marked `@ProviderType` and are considered experimental; incompatible changes may happen in future minor releases.
 
@@ -19,6 +23,9 @@ mvn verify
 
 # Skip integration tests explicitly
 mvn install -DskipITs
+
+# Disable Keycloak-based integration tests
+mvn verify -Dit.keycloak.enabled=false
 
 # Run Sling locally with this bundle (interactive, waits for input to stop)
 mvn feature-launcher:start feature-launcher:stop -Dfeature-launcher.waitForInput
@@ -54,13 +61,14 @@ src/
     java/
       org/apache/sling/auth/oauth_client/
         *.java           # Public API: OAuthTokenAccess, ClientConnection, OAuthTokenResponse
-        impl/            # All OSGi DS components; not part of the public API
+        impl/            # OSGi DS components and internal flow/error classes; not public API
         spi/             # Extension points: UserInfoProcessor, LoginCookieManager, OidcAuthCredentials
         support/         # Base classes for consumers (OAuthEnabledSlingServlet)
   test/
-    java/                # Unit and integration tests (mirrors main package structure)
+    java/
+      .../itbundle/      # IT-only support bundle generation/install helpers
     resources/
-      keycloak-import/   # Keycloak realm JSON used by ITs via Testcontainers
+      keycloak-import/   # Keycloak realm JSON used by ITs and Makefile local setup
 bnd.bnd                  # BND directives (marks redis.clients.jedis as optional import)
 pom.xml
 Makefile                 # Developer convenience targets (keycloak, sling config)
@@ -74,8 +82,11 @@ Makefile                 # Developer convenience targets (keycloak, sling config
 - **Code formatting** — Spotless is configured; run `mvn spotless:apply` before committing if the build fails on formatting.
 - **Package visibility** — `impl` classes are not exported. Keep public API in the root package, SPI in `.spi`, consumer helpers in `.support`.
 - **Redis is optional** — `bnd.bnd` marks `redis.clients.jedis` as `resolution:=optional`. The bundle must deploy and function without Redis on the classpath.
+- **Feature model overlays** — `main.json` and `redis.json` pin runtime feature dependencies separately; keep Redis dependencies out of the base feature.
 - **OIDC metadata vs explicit config** — `OidcConnectionImpl` requires either `baseUrl` (discovery) or full explicit endpoint configuration (`authorizationEndpoint`, `tokenEndpoint`, `userInfoUrl`, `jwkSetURL`, `issuer`), but not both.
+- **OAuth vs OIDC connection choice** — use `OAuthConnectionImpl` for non-OIDC providers; use `OidcConnectionImpl` when OIDC metadata/ID token handling is needed.
 - **OIDC logout hardening** — if `enableSPInitiatedSingleLogout=true` on `OidcAuthenticationHandler`, `logoutRedirectAllowedHosts` must be configured.
+- **OAuth servlet error model** — top-level flow errors use specific exceptions (`OAuthCallbackException`, `OAuthEntryPointException`) under `OAuthFlowException`; keep user-safe messages while preserving root causes.
 - **4-space indentation**, no trailing whitespace, LF line endings.
 - All source files must carry the Apache License 2.0 header (enforced by `apache-rat-plugin`).
 
@@ -91,6 +102,7 @@ Makefile                 # Developer convenience targets (keycloak, sling config
 - **Framework**: JUnit Jupiter (JUnit 5) + AssertJ assertions.
 - **Unit test mocking**: Mockito, Sling Mock (`sling-mock.junit5`), OSGi Mock (`osgi-mock.junit5`), Sling Mock Oak for JCR-backed tests.
 - **Integration tests** (`*IT.java`): run with `maven-failsafe-plugin`; use Testcontainers (including `testcontainers-keycloak` and `testcontainers-redis`) and require Docker.
+- **IT bootstrap**: `AuthorizationCodeFlowIT` generates and installs a dedicated support bundle from `src/test/java/.../itbundle`.
 - Test files live under `src/test/java/` mirroring the main source package structure.
 - Coverage is not enforced by a Maven plugin; no coverage thresholds to maintain.
 - Disable Keycloak ITs: `mvn verify -Dit.keycloak.enabled=false`.
@@ -98,6 +110,7 @@ Makefile                 # Developer convenience targets (keycloak, sling config
 # Gotchas
 
 - **Docker required for ITs** — integration tests start Keycloak (`quay.io/keycloak/keycloak:26.4`) and Redis containers via Testcontainers; without Docker `verify` fails.
+- **External Keycloak shortcut for ITs** — set `KEYCLOAK_URL` to reuse an already running Keycloak instance instead of starting a Testcontainers Keycloak.
 - **Local Keycloak version differs from ITs** — `make keycloak-run-import` uses `quay.io/keycloak/keycloak:20.0.3` for local manual testing.
 - **Port reservation** — `build-helper-maven-plugin` reserves a random `http.port` for the embedded Sling instance during ITs. Do not hard-code port 8080 in tests.
 - **IT startup timeout** — controlled by `-Dit.startTimeoutSeconds=60` (default). Increase on slow machines.
