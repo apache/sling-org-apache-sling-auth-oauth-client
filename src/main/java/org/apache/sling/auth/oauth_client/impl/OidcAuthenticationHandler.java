@@ -37,6 +37,7 @@ import java.util.stream.Stream;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.proc.BadJOSEException;
+import com.nimbusds.jose.util.DefaultResourceRetriever;
 import com.nimbusds.oauth2.sdk.AuthorizationCode;
 import com.nimbusds.oauth2.sdk.AuthorizationCodeGrant;
 import com.nimbusds.oauth2.sdk.AuthorizationResponse;
@@ -93,6 +94,17 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     public static final String REDIRECT_ATTRIBUTE_NAME = "sling.redirect";
 
     private static final Logger logger = LoggerFactory.getLogger(OidcAuthenticationHandler.class);
+
+    // Nimbus RemoteJWKSet defaults, kept in sync so the default behaviour is unchanged.
+    static final int DEFAULT_JWK_SET_HTTP_SIZE_LIMIT = 50 * 1024;
+    static final int DEFAULT_JWK_SET_HTTP_CONNECT_TIMEOUT = 500;
+    static final int DEFAULT_JWK_SET_HTTP_READ_TIMEOUT = 500;
+
+    // Defensible bounds for the JWK set retrieval settings. These guard the authentication path against a
+    // compromised or malfunctioning IdP: an unbounded ("0") size/timeout is not allowed (Nimbus treats 0 as
+    // infinite), and the values are capped so no single value can be misconfigured to an abusive amount.
+    static final int MAX_JWK_SET_HTTP_SIZE_LIMIT = 10 * 1024 * 1024; // 10 MB
+    static final int MAX_JWK_SET_HTTP_TIMEOUT = 60_000; // 60 s
     private static final String AUTH_TYPE = "oidc";
 
     private final Map<String, ClientConnection> connections;
@@ -126,6 +138,12 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
     private final CryptoService cryptoService;
 
     private final OidcLogoutHandler logoutHandler;
+
+    private final int jwkSetHttpSizeLimit;
+
+    private final int jwkSetHttpConnectTimeout;
+
+    private final int jwkSetHttpReadTimeout;
 
     @ObjectClassDefinition(
             name = "Apache Sling Oidc Authentication Handler",
@@ -196,6 +214,35 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                         + "logout is enabled and this is empty, the service will fail to activate with an exception.",
                 cardinality = Integer.MAX_VALUE)
         String[] logoutRedirectAllowedHosts() default {};
+
+        @AttributeDefinition(
+                name = "JWK set HTTP size limit (bytes)",
+                description = "Maximum size, in bytes, of the JWK set document fetched from the IdP's jwks_uri "
+                        + "when validating the ID token signature. Increase this if the IdP publishes a large key "
+                        + "set and token validation fails with 'Exceeded configured input limit'. Must be between "
+                        + "1 and 10485760 (10 MB); an unbounded value is not allowed on the authentication path. "
+                        + "Default is 51200 (50 KB), the Nimbus library default.",
+                min = "1",
+                max = "" + MAX_JWK_SET_HTTP_SIZE_LIMIT)
+        int jwkSetHttpSizeLimit() default DEFAULT_JWK_SET_HTTP_SIZE_LIMIT;
+
+        @AttributeDefinition(
+                name = "JWK set HTTP connect timeout (ms)",
+                description = "Connect timeout, in milliseconds, for retrieving the JWK set from the IdP's "
+                        + "jwks_uri. Must be between 1 and 60000; an unbounded value is not allowed on the "
+                        + "authentication path. Default is 500.",
+                min = "1",
+                max = "" + MAX_JWK_SET_HTTP_TIMEOUT)
+        int jwkSetHttpConnectTimeout() default DEFAULT_JWK_SET_HTTP_CONNECT_TIMEOUT;
+
+        @AttributeDefinition(
+                name = "JWK set HTTP read timeout (ms)",
+                description = "Read timeout, in milliseconds, for retrieving the JWK set from the IdP's "
+                        + "jwks_uri. Must be between 1 and 60000; an unbounded value is not allowed on the "
+                        + "authentication path. Default is 500.",
+                min = "1",
+                max = "" + MAX_JWK_SET_HTTP_TIMEOUT)
+        int jwkSetHttpReadTimeout() default DEFAULT_JWK_SET_HTTP_READ_TIMEOUT;
     }
 
     @Activate
@@ -230,6 +277,14 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 : Set.of();
         this.cryptoService = cryptoService;
         this.logoutHandler = logoutHandler;
+        // Validate the JWK set retrieval settings at activation so a bad configuration fails immediately
+        // with a clear message, rather than silently activating and failing on every later OIDC callback.
+        this.jwkSetHttpSizeLimit =
+                requireInRange(config.jwkSetHttpSizeLimit(), "jwkSetHttpSizeLimit", MAX_JWK_SET_HTTP_SIZE_LIMIT);
+        this.jwkSetHttpConnectTimeout =
+                requireInRange(config.jwkSetHttpConnectTimeout(), "jwkSetHttpConnectTimeout", MAX_JWK_SET_HTTP_TIMEOUT);
+        this.jwkSetHttpReadTimeout =
+                requireInRange(config.jwkSetHttpReadTimeout(), "jwkSetHttpReadTimeout", MAX_JWK_SET_HTTP_TIMEOUT);
 
         // Security validation: enforce allowed hosts when SP-initiated single logout is enabled
         if (this.enableSPInitiatedSingleLogout && this.logoutRedirectAllowedHosts.isEmpty()) {
@@ -247,6 +302,27 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
                 null);
 
         logger.info("OidcAuthenticationHandler successfully activated");
+    }
+
+    /**
+     * Validates that a JWK set retrieval setting is a positive value within the allowed range. A value of 0
+     * (which Nimbus interprets as "unlimited"/"no timeout") or any negative value is rejected, as an unbounded
+     * network fetch on the authentication path is a denial-of-service risk.
+     *
+     * @param value the configured value
+     * @param name  the configuration property name, used in the error message
+     * @param max   the inclusive upper bound
+     * @return the validated value
+     * @throws IllegalArgumentException if the value is outside {@code [1, max]}
+     */
+    private static int requireInRange(int value, @NotNull String name, int max) {
+        if (value < 1 || value > max) {
+            throw new IllegalArgumentException(String.format(
+                    "SECURITY: '%s' must be between 1 and %d but was %d. An unbounded (0 or negative) value is "
+                            + "not allowed for JWK set retrieval on the authentication path.",
+                    name, max, value));
+        }
+        return value;
     }
 
     @Override
@@ -511,7 +587,7 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
      * @param conn         The resolved OIDC connection.
      * @return The validated ID token claims set.
      */
-    private static @NotNull IDTokenClaimsSet validateIdToken(
+    private @NotNull IDTokenClaimsSet validateIdToken(
             @NotNull TokenResponse tokenResponse, @NotNull ResolvedOidcConnection conn, Nonce nonce) {
         Issuer issuer = new Issuer(conn.issuer());
         ClientID clientID = new ClientID(conn.clientId());
@@ -519,7 +595,10 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             JWSAlgorithm jwsAlg = JWSAlgorithm.RS256; // TODO: Read from config
             URL jwkSetURL = conn.jwkSetURL().toURL();
 
-            IDTokenValidator validator = new IDTokenValidator(issuer, clientID, jwsAlg, jwkSetURL);
+            // Use a resource retriever with configurable HTTP limits so large JWK sets can be fetched.
+            DefaultResourceRetriever resourceRetriever =
+                    new DefaultResourceRetriever(jwkSetHttpConnectTimeout, jwkSetHttpReadTimeout, jwkSetHttpSizeLimit);
+            IDTokenValidator validator = new IDTokenValidator(issuer, clientID, jwsAlg, jwkSetURL, resourceRetriever);
             return validator.validate(
                     tokenResponse.toSuccessResponse().getTokens().toOIDCTokens().getIDToken(), nonce);
         } catch (BadJOSEException | JOSEException | MalformedURLException e) {

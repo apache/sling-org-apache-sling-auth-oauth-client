@@ -464,6 +464,71 @@ class OidcAuthenticationHandlerTest {
     }
 
     @Test
+    void extractCredentials_WithJwkSetHttpSizeLimitTooSmall_FailsToRetrieveJwkSet() throws JOSEException {
+        // A very small JWK set size limit must cause the JWK set retrieval to fail during token validation.
+        config = createConfig(Map.of("userInfoEnabled", true, "jwkSetHttpSizeLimit", 10));
+
+        RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
+        String idToken = createIdToken(rsaJWK, "client-id", ISSUER);
+        Cookie[] cookies = createMockCookies();
+        String baseUrl = "http://localhost:" + idpServer.getAddress().getPort();
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(
+                        idToken, rsaJWK, baseUrl, cookies, false, true));
+        assertTrue(
+                exception.getMessage().contains("Exceeded configured input limit"),
+                "Expected an input-limit-exceeded error but got: " + exception.getMessage());
+    }
+
+    @Test
+    void extractCredentials_WithJwkSetHttpSizeLimitRaised_ValidatesToken() throws JOSEException {
+        // A raised JWK set size limit must still allow the JWK set to be retrieved and the token validated.
+        config = createConfig(Map.of("userInfoEnabled", true, "jwkSetHttpSizeLimit", 102400));
+
+        RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
+        AuthenticationInfo authInfo = extractCredentials_WithMatchingState_WithValidConnection_WithIdToken(
+                createIdToken(rsaJWK, "client-id", ISSUER),
+                rsaJWK,
+                "http://localhost:" + idpServer.getAddress().getPort(),
+                createMockCookies(),
+                false,
+                true);
+        assertEquals("1234567890", authInfo.get("user.name"));
+    }
+
+    @Test
+    void activation_WithZeroJwkSetHttpSizeLimit_FailsFast() {
+        // 0 means "unlimited" to Nimbus and must be rejected at activation, not silently accepted.
+        config = createConfig(Map.of("jwkSetHttpSizeLimit", 0));
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, this::createOidcAuthenticationHandler);
+        assertTrue(
+                exception.getMessage().contains("jwkSetHttpSizeLimit"),
+                "Expected a validation error naming the property but got: " + exception.getMessage());
+    }
+
+    @Test
+    void activation_WithNegativeJwkSetHttpConnectTimeout_FailsFast() {
+        config = createConfig(Map.of("jwkSetHttpConnectTimeout", -1));
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, this::createOidcAuthenticationHandler);
+        assertTrue(
+                exception.getMessage().contains("jwkSetHttpConnectTimeout"),
+                "Expected a validation error naming the property but got: " + exception.getMessage());
+    }
+
+    @Test
+    void activation_WithJwkSetHttpReadTimeoutAboveMax_FailsFast() {
+        config = createConfig(Map.of("jwkSetHttpReadTimeout", 60_001));
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, this::createOidcAuthenticationHandler);
+        assertTrue(
+                exception.getMessage().contains("jwkSetHttpReadTimeout"),
+                "Expected a validation error naming the property but got: " + exception.getMessage());
+    }
+
+    @Test
     void extractCredentials_WithMatchingState_WithValidConnection_WithValidIdToken_WithMissingUserInfo()
             throws JOSEException {
         RSAKey rsaJWK = new RSAKeyGenerator(2048).keyID("123").generate();
