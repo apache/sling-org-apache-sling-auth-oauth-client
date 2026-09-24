@@ -27,11 +27,8 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -247,11 +244,22 @@ public class OAuthCallbackServlet extends SlingAllMethodsServlet {
 
     private static void handleRedirect(@NotNull OAuthCookieValue clientState, @NotNull HttpServletResponse response)
             throws IOException {
-        Optional<String> redirect = Optional.ofNullable(clientState.redirect());
-        if (redirect.isEmpty()) {
+        String redirect = clientState.redirect();
+        if (redirect == null || redirect.isEmpty()) {
             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-        } else {
-            response.sendRedirect(URLDecoder.decode(redirect.get(), StandardCharsets.UTF_8));
+            return;
         }
+        // Do NOT URL-decode again: the value stored in the (encrypted) cookie is already the decoded
+        // request parameter. A second decode would turn an innocuous-looking "/%2Fevil.com" into a
+        // protocol-relative "//evil.com", defeating the leading-"//" check and enabling an open
+        // redirect. Re-validate here as defense in depth before emitting the Location header.
+        try {
+            RedirectHelper.validateRedirect(redirect);
+        } catch (OAuthEntryPointException e) {
+            logger.warn("Refusing to redirect to invalid post-login location '{}'", redirect);
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
+        response.sendRedirect(redirect);
     }
 }

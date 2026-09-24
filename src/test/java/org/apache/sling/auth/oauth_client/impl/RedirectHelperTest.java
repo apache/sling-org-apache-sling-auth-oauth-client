@@ -133,15 +133,66 @@ class RedirectHelperTest {
                 "//example.com/path",
                 "https://example.com/path",
                 "ftp://example.com/path",
-                "javascript:alert('xss')"
+                "javascript:alert('xss')",
+                "/\\evil.com",
+                "/\\\\evil.com",
+                "/path\\to\\evil.com",
+                "/path\ttab",
+                "/path\nnewline",
+                "/path\rreturn",
             })
     void testValidateRedirectWithInvalidUrl(String url) {
-        // Should throw exception for absolute URLs (cross-site redirect)
+        // Should throw exception for absolute URLs (cross-site redirect) and for the
+        // backslash/control-character bypasses that a browser may normalise into a
+        // protocol-relative or otherwise unexpected target.
         OAuthEntryPointException exception =
                 assertThrows(OAuthEntryPointException.class, () -> RedirectHelper.validateRedirect(url));
 
         assertTrue(exception.getMessage().contains("Invalid redirect URL"));
         assertTrue(exception.getCause() instanceof IllegalArgumentException);
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "/",
+                "/valid/path",
+                "/another/valid/path",
+                "/path?query=value",
+                "/path#fragment",
+                "/path%20encoded",
+            })
+    void testIsSafeRelativePathAcceptsSiteRelativePaths(String redirect) {
+        assertTrue(RedirectHelper.isSafeRelativePath(redirect), () -> redirect + " should be considered safe");
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                // no leading slash
+                "path",
+                "",
+                // protocol-relative / backslash bypasses
+                "//evil.com",
+                "/\\evil.com",
+                "/\\\\evil.com",
+                "\\\\evil.com",
+                "\\/evil.com",
+                // embedded backslash anywhere in the path
+                "/path\\to\\evil.com",
+                // control characters
+                "/path\u0000null",
+                "/path\ttab",
+                "/path\nnewline",
+                "/path\rreturn",
+                "/path\u007Fdel",
+                // absolute URIs / URIs carrying an authority
+                "http://evil.com",
+                "https://evil.com/path",
+                "//evil.com/path",
+            })
+    void testIsSafeRelativePathRejectsUnsafeInput(String redirect) {
+        assertFalse(RedirectHelper.isSafeRelativePath(redirect), () -> redirect + " should be considered unsafe");
     }
 
     @Test

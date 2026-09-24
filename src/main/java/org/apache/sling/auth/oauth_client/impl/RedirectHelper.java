@@ -169,10 +169,43 @@ class RedirectHelper {
         if (redirect == null || redirect.isEmpty()) {
             return;
         }
-        if (!redirect.startsWith("/") || redirect.startsWith("//")) {
+        if (!isSafeRelativePath(redirect)) {
             String message = "Invalid redirect URL: " + redirect;
-            // Relative redirect within the same domain is allowed
+            // Only a site-relative path within the same domain is allowed
             throw new OAuthEntryPointException(message, new IllegalArgumentException(message));
         }
+    }
+
+    /**
+     * Returns {@code true} only if {@code redirect} is a safe site-relative path that cannot be
+     * turned into a cross-origin redirect. A single leading {@code '/'} is required; the following
+     * are rejected because browsers may treat them as absolute/cross-origin targets:
+     * <ul>
+     *   <li>protocol-relative URLs ({@code //host} or {@code /\host} — a backslash is normalised to
+     *       {@code /} by browsers);</li>
+     *   <li>any backslash anywhere (browsers normalise {@code \} to {@code /});</li>
+     *   <li>control characters (may be stripped by browsers to reveal a different target);</li>
+     *   <li>absolute URIs (with a scheme) or URIs carrying an authority/host component.</li>
+     * </ul>
+     */
+    static boolean isSafeRelativePath(@NotNull String redirect) {
+        if (!redirect.startsWith("/") || redirect.startsWith("//") || redirect.startsWith("/\\")) {
+            return false;
+        }
+        for (int i = 0; i < redirect.length(); i++) {
+            char c = redirect.charAt(i);
+            if (c == '\\' || c < 0x20 || c == 0x7f) {
+                return false;
+            }
+        }
+        try {
+            URI uri = new URI(redirect);
+            if (uri.isAbsolute() || uri.getAuthority() != null || uri.getHost() != null) {
+                return false;
+            }
+        } catch (URISyntaxException e) {
+            return false;
+        }
+        return true;
     }
 }

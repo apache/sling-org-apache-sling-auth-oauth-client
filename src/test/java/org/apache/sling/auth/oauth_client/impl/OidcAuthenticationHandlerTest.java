@@ -1597,6 +1597,63 @@ class OidcAuthenticationHandlerTest {
         }));
     }
 
+    /**
+     * Regression test: when no {@code redirect} parameter is supplied, the fallback to
+     * {@code request.getRequestURI()} must still be validated before being stored in the
+     * (encrypted) state cookie and later emitted in the callback's {@code Location} header. An
+     * unsafe request URI (e.g. one containing a backslash, which browsers normalise to a second
+     * slash) must be rejected and fail safe, i.e. no post-login redirect is stored, rather than
+     * being propagated unchecked.
+     */
+    @Test
+    void requestCredentialsWithUnsafeRequestURIFallsBackSafely() {
+        // This is the class used by Sling to configure the Authentication Handler
+        OidcProviderMetadataRegistry oidcProviderMetadataRegistry = mock(OidcProviderMetadataRegistry.class);
+        String mockIdPUrl = "http://localhost:8080";
+        when(oidcProviderMetadataRegistry.getJWKSetURI(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/jwks.json"));
+        when(oidcProviderMetadataRegistry.getIssuer(mockIdPUrl)).thenReturn(ISSUER);
+        when(oidcProviderMetadataRegistry.getAuthorizationEndpoint(mockIdPUrl))
+                .thenReturn(URI.create(mockIdPUrl + "/authorize"));
+        when(oidcProviderMetadataRegistry.getTokenEndpoint(mockIdPUrl)).thenReturn(URI.create(mockIdPUrl + "/token"));
+
+        connections.add(new MockOidcConnection(
+                new String[] {"openid"},
+                MOCK_OIDC_PARAM,
+                "client-id",
+                "client-secret",
+                "http://localhost:8080",
+                new String[] {"access_type=offline"},
+                oidcProviderMetadataRegistry));
+
+        config = createConfig(Map.of(
+                "defaultConnectionName",
+                MOCK_OIDC_PARAM,
+                "callbackUri",
+                "http://redirect",
+                "pkceEnabled",
+                false,
+                "path",
+                new String[] {"/"}));
+
+        when(request.getParameter("c")).thenReturn(MOCK_OIDC_PARAM);
+        when(request.getParameter(RedirectHelper.PARAMETER_NAME_REDIRECT)).thenReturn(null);
+        when(request.getRequestURI()).thenReturn("/\\evil.com");
+        MockSlingHttpServletResponse mockResponse = new MockSlingHttpServletResponse();
+
+        createOidcAuthenticationHandler();
+        assertTrue(oidcAuthenticationHandler.requestCredentials(request, mockResponse));
+
+        // The unsafe request URI must not be stored as the post-login redirect target
+        assertTrue(Arrays.stream(mockResponse.getCookies()).anyMatch(cookie -> {
+            if (OAuthCookieValue.COOKIE_NAME_REQUEST_KEY.equals(cookie.getName())) {
+                OAuthCookieValue oauthCookieValue = new OAuthCookieValue(cookie.getValue(), cryptoService);
+                assertNull(oauthCookieValue.redirect());
+                return true;
+            }
+            return false;
+        }));
+    }
+
     @Test
     void requestCredentialsWithResourceAttribute() {
         // This is the class used by Sling to configure the Authentication Handler

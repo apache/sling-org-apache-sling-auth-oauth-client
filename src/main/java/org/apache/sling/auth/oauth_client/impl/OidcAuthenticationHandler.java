@@ -678,10 +678,22 @@ public class OidcAuthenticationHandler extends DefaultAuthenticationFeedbackHand
             // then after the authentication redirect to the requested uri
 
             // Extract path and query from the uri
-            redirect = request.getRequestURI();
+            String requestUri = request.getRequestURI();
             String queryString = request.getQueryString();
-            if (queryString != null && !queryString.isEmpty()) {
-                redirect = redirect + "?" + queryString;
+            String candidateRedirect =
+                    (queryString != null && !queryString.isEmpty()) ? requestUri + "?" + queryString : requestUri;
+            // request.getRequestURI() is server-derived and should always be a safe site-relative
+            // path, but validate it anyway as defense in depth before it reaches the redirect sink,
+            // and fail safe (no post-login redirect) rather than propagate an unvalidated value.
+            try {
+                RedirectHelper.validateRedirect(candidateRedirect);
+                redirect = candidateRedirect;
+            } catch (OAuthEntryPointException e) {
+                logger.warn(
+                        "Refusing to use request URI '{}' as post-login redirect target: {}",
+                        candidateRedirect,
+                        e.getMessage());
+                redirect = null;
             }
         }
 
