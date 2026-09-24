@@ -237,4 +237,41 @@ class OAuthCallbackServletTest {
                 .as("location header")
                 .isEqualTo("/local-redirect");
     }
+
+    /**
+     * Regression test for the redirect double-decode open-redirect vector.
+     *
+     * <p>At flow start the entry point reads {@code redirect=/%252Fevil.com}; {@code getParameter}
+     * decodes it once to {@code /%2Fevil.com}, which passes validation and is stored in the (encrypted)
+     * state cookie. The callback must emit that value verbatim. A second URL-decode here would turn it
+     * into the protocol-relative {@code //evil.com}, which a container emitting relative redirects would
+     * send to the browser as a cross-origin redirect to {@code evil.com}.
+     */
+    @Test
+    void redirectIsNotDoubleDecoded() throws IOException, ServletException {
+        successfulExecution("bar|mock-oidc-local|/%2Fevil.com");
+
+        assertThat(context.response().getStatus()).as("response code").isEqualTo(HttpServletResponse.SC_FOUND);
+
+        String location = context.response().getHeader("Location");
+        assertThat(location)
+                .as("Location must not be double-decoded into a protocol-relative URL")
+                .isEqualTo("/%2Fevil.com")
+                .doesNotStartWith("//");
+    }
+
+    /**
+     * Regression test for the denylist bypass: a backslash after the leading slash ({@code /\evil.com})
+     * is normalised by browsers to {@code //evil.com}. The callback re-validates the stored redirect and
+     * must reject it rather than emit it in a {@code Location} header.
+     */
+    @Test
+    void redirectWithBackslashIsRejected() throws IOException, ServletException {
+        successfulExecution("bar|mock-oidc-local|/\\evil.com");
+
+        assertThat(context.response().getStatus()).as("response code").isEqualTo(HttpServletResponse.SC_BAD_REQUEST);
+        assertThat(context.response().getHeader("Location"))
+                .as("no redirect must be emitted for a rejected target")
+                .isNull();
+    }
 }
